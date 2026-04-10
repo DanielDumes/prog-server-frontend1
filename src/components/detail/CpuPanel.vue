@@ -33,7 +33,7 @@
           <div class="st-lbl">Hilos lógicos</div>
         </div>
         <div class="spec-tile spec-wide">
-          <div class="st-val st-mono" style="font-size:10px">{{ data.summary?.cpu_model || 'Intel Xeon Scalable' }}</div>
+          <div class="st-val st-mono" style="font-size:10px">{{ data.summary?.cpu_model || '—' }}</div>
           <div class="st-lbl">Modelo CPU</div>
         </div>
       </div>
@@ -64,7 +64,7 @@ const cpuTempSensors = computed(() =>
 )
 const maxCpuReading = computed(() => {
   const v = cpuTempSensors.value.map(s => s.reading_c).filter(v => v != null)
-  return v.length ? Math.max(...v) : 40
+  return v.length ? Math.max(...v) : 0
 })
 const cpuArcColor = computed(() =>
   maxCpuReading.value > 75 ? '#c0392b' : maxCpuReading.value > 60 ? '#e67e22' : '#1a8a7a'

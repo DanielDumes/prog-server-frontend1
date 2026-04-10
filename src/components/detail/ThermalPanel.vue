@@ -9,11 +9,20 @@
     </header>
     <div class="panel-body">
       <div class="temp-grid">
-        <div class="temp-card" v-for="g in groupedTemperatures" :key="g.name + g.count" :class="'tc--' + g.status">
-          <div class="tc-val">{{ g.reading !== null ? Math.round(g.reading) + '°' : 'N/A' }}</div>
+        <div class="temp-card" v-for="g in groupedTemperatures" :key="g.name + g.count" :class="'tc--' + g.status" :title="g.sensorNames">
+          <div class="tc-top">
+            <div class="tc-val">{{ g.reading !== null ? Math.round(g.reading) + '°' : 'N/A' }}</div>
+            <div class="tc-badge" v-if="g.isGroup">⌀ {{ g.count }}</div>
+          </div>
           <div class="tc-name">{{ g.name }}</div>
-          <div class="tc-badge" v-if="g.isGroup">⌀ {{ g.count }}</div>
-          <div class="tc-thresh" v-if="!g.isGroup && (g.caution || g.critical)">
+
+          <!-- Barra de Rango Visual -->
+          <div class="tc-range" v-if="g.caution || g.critical">
+            <div class="tc-fill" :style="{ width: Math.min(100, (g.reading / (g.critical || g.caution * 1.2)) * 100) + '%' }"></div>
+            <div class="tc-mark tc-mark--warn" v-if="g.caution" :style="{ left: (g.caution / (g.critical || g.caution * 1.2) * 100) + '%' }"></div>
+          </div>
+
+          <div class="tc-thresh" v-if="g.caution || g.critical">
             <span v-if="g.caution">C:{{ g.caution }}°</span>
             <span v-if="g.critical">K:{{ g.critical }}°</span>
           </div>
@@ -69,9 +78,14 @@ const groupedTemperatures = computed(() => {
     const ref = valid[0]
     let name = ref.name
     if (isGroup) {
-      if (ref.location === 'Memory')    name = 'Memoria RAM'
-      else if (ref.location === 'CPU')  name = 'CPU / Procesadores'
-      else if (ref.name.includes('VR')) name = 'Reguladores (VRM)'
+      if (ref.location === 'Memory')    name = 'Reguladores Memoria'
+      else if (ref.location === 'CPU')  name = 'Reguladores CPU'
+      else if (ref.name.includes('VR')) {
+        const lowName = (ref.name || '').toLowerCase()
+        if (lowName.includes('dimm'))   name = 'Reguladores Memoria'
+        else if (lowName.includes('cpu') || lowName.includes('proc')) name = 'Reguladores CPU'
+        else name = `Reguladores ${ref.location}`
+      }
       else name = getBaseName(ref.name, ref.location)
     }
     const worstStatus = valid.map(s => tempClsStr(s)).reduce((a, b) => {
@@ -79,7 +93,20 @@ const groupedTemperatures = computed(() => {
       if (a === 'warn' || b === 'warn') return 'warn'
       return 'ok'
     }, 'ok')
-    result.push({ name, reading: isGroup ? avg : ref.reading_c, status: worstStatus, isGroup, count: valid.length, caution: ref.upper_caution, critical: ref.upper_critical, location: ref.location })
+
+    const sensorNames = valid.map(s => `${s.name}: ${s.reading_c}°C`).join('\n')
+
+    result.push({ 
+      name, 
+      reading: isGroup ? avg : ref.reading_c, 
+      status: worstStatus, 
+      isGroup, 
+      count: valid.length, 
+      caution: ref.upper_caution, 
+      critical: ref.upper_critical, 
+      location: ref.location,
+      sensorNames
+    })
   })
   result.sort((a, b) => {
     const score = i => {
@@ -114,11 +141,21 @@ const groupedTemperatures = computed(() => {
 .tc--ok   { background:#f2fbf8; border-color:#b8e4dc; }
 .tc--warn { background:#fef9f2; border-color:#f9d5a5; }
 .tc--crit { background:#fdf3f3; border-color:#f5c0c0; }
-.tc-val  { font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600; }
+.tc-top   { display:flex; justify-content:space-between; align-items:center; }
+.tc-val   { font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600; }
 .tc--ok   .tc-val { color:#0f6e44; }
 .tc--warn .tc-val { color:#854f0b; }
 .tc--crit .tc-val { color:#a32d2d; }
 .tc-name  { font-size:9px; font-weight:700; color:#6b6560; text-transform:uppercase; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:.04em; }
-.tc-badge { display:inline-block; font-size:8px; font-weight:700; margin-top:5px; padding:2px 6px; border-radius:4px; background:#e6f0fb; color:#185fa5; }
-.tc-thresh { font-size:8px; color:#9a9490; margin-top:4px; display:flex; gap:6px; font-family:'IBM Plex Mono',monospace; }
+.tc-badge { display:inline-block; font-size:8px; font-weight:700; padding:2px 6px; border-radius:4px; background:rgba(0,0,0,0.05); color:inherit; }
+
+.tc-range { height:4px; background:rgba(0,0,0,0.06); border-radius:2px; margin-top:10px; position:relative; overflow:visible; }
+.tc-fill  { height:100%; border-radius:2px; transition:width .4s ease-out; }
+.tc--ok   .tc-fill { background:#10b981; }
+.tc--warn .tc-fill { background:#f59e0b; }
+.tc--crit .tc-fill { background:#ef4444; }
+.tc-mark  { position:absolute; top:-2px; width:2px; height:8px; background:#9a9490; }
+.tc-mark--warn { background:#d97706; }
+
+.tc-thresh { font-size:8px; color:#9a9490; margin-top:8px; display:flex; gap:6px; font-family:'IBM Plex Mono',monospace; opacity:0.8; }
 </style>

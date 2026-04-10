@@ -54,5 +54,15 @@ export function useIlo() {
     return res.json()
   }
 
-  return { getServers, addServer, deleteServer, fetchSummary, fetchAll, fetchMetrics }
+  async function fetchCreds(id) {
+    const res = await fetch(`${BACKEND_URL}/api/servers/${id}/creds`)
+    if (!res.ok) throw new Error('Error al obtener credenciales')
+    return res.json()
+  }
+
+  function getJircUrl(id) {
+    return `${BACKEND_URL}/api/jirc/${id}`
+  }
+
+  return { getServers, addServer, deleteServer, fetchSummary, fetchAll, fetchMetrics, fetchCreds, getJircUrl }
 }

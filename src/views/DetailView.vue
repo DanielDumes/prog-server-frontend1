@@ -17,6 +17,20 @@
       </div>
       <div class="topbar-right">
         <span class="last-sync" v-if="lastUpdate">↺ {{ lastUpdate }}</span>
+        <button class="btn-console-main" @click="openConsole" title="Consola Web (HTML5)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          Consola Web
+        </button>
+        <button class="btn-console-main btn-console-jirc-main" @click="launchJirc" title="Consola Directa (Zero-Login)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Consola Directa
+        </button>
         <button class="btn-sync" @click="load" :disabled="loading">
           <span :class="{ spin: loading }">⟳</span>
           {{ loading ? 'Cargando…' : 'Sincronizar' }}
@@ -65,6 +79,45 @@
         <SystemInfoPanel :data="data" :server="server" />
       </section>
     </main>
+
+    <!-- ── Asistente de Credenciales ── -->
+    <Transition name="slide-up">
+      <div class="cred-helper" v-if="showHelper && helperData">
+        <header class="ch-head">
+          <div class="ch-info">
+            <span class="ch-title">Asistente de Acceso</span>
+            <span class="ch-sub">Copia las credenciales para iLO</span>
+          </div>
+          <button class="ch-close" @click="showHelper = false">✕</button>
+        </header>
+        
+        <div class="ch-body">
+          <div class="ch-item">
+            <label>Usuario</label>
+            <div class="ch-input-grp">
+              <input readonly :value="helperData.user" />
+              <button @click="copyToClipboard(helperData.user, 'usuario')" class="btn-copy" title="Copiar Usuario">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="ch-item">
+            <label>Contraseña</label>
+            <div class="ch-input-grp">
+              <input type="password" readonly :value="helperData.pass" />
+              <button @click="copyToClipboard(helperData.pass, 'contraseña')" class="btn-copy" title="Copiar Contraseña">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <footer class="ch-foot">
+          <p>Utiliza estas credenciales en la pestaña que se acaba de abrir.</p>
+        </footer>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -84,11 +137,13 @@ import SystemInfoPanel from '../components/detail/SystemInfoPanel.vue'
 const props = defineProps({ server: Object, refreshCount: Number })
 defineEmits(['back'])
 
-const { fetchAll } = useIlo()
+const { fetchAll, fetchCreds, getJircUrl } = useIlo()
 const data       = ref(null)
 const loading    = ref(true)
 const error      = ref(null)
 const lastUpdate = ref('')
+const helperData = ref(null)
+const showHelper = ref(false)
 let autoTimer    = null
 
 // ── Computed para HeroStrip ───────────────────────────────────────
@@ -132,6 +187,24 @@ async function load() {
   finally { loading.value = false }
 }
 
+async function openConsole() {
+  window.open(`https://${props.server.host}/`, '_blank')
+  try {
+    helperData.value = await fetchCreds(props.server.id)
+    showHelper.value = true
+  } catch (e) { console.error("Error al obtener credenciales:", e) }
+}
+
+function copyToClipboard(text, label) {
+  navigator.clipboard.writeText(text)
+  // Opcional: podrías disparar un toast aquí si tuvieras un sistema de notificaciones
+}
+
+function launchJirc() {
+  const url = getJircUrl(props.server.id)
+  window.location.href = url
+}
+
 // Bug fix: responder al refreshCount del padre (socket events)
 watch(() => props.refreshCount, () => load())
 
@@ -164,6 +237,26 @@ onUnmounted(() => { clearInterval(autoTimer) })
 .btn-sync:hover { background:#2d2925; }
 .btn-sync:disabled { opacity:.5; cursor:not-allowed; }
 
+.btn-console-main {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
+  padding: 8px 18px; border-radius: 8px;
+  background: white; color: #1a8a7a;
+  border: 1.5px solid #1a8a7a; cursor: pointer;
+  letter-spacing: .02em; transition: all .2s;
+}
+.btn-console-main:hover {
+  background: #1a8a7a; color: white;
+  box-shadow: 0 4px 12px rgba(26,138,122,0.2);
+}
+.btn-console-main:hover svg { transform: scale(1.1); }
+
+.btn-console-jirc-main { color: #8e44ad; border-color: #8e44ad; }
+.btn-console-jirc-main:hover {
+  background: #8e44ad; color: white;
+  box-shadow: 0 4px 12px rgba(142,68,173,0.3);
+}
+
 /* ── ERROR + LOADER ── */
 .err-bar   { background:#fdecea; border-bottom:1.5px solid #f5c0c0; padding:10px 36px; display:flex; align-items:center; gap:12px; font-size:12px; font-weight:600; color:#a32d2d; }
 .err-retry { margin-left:auto; background:#a32d2d; color:white; border:none; padding:5px 14px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:700; }
@@ -183,7 +276,47 @@ onUnmounted(() => { clearInterval(autoTimer) })
 .spin { display:inline-block; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
+/* ── ASISTENTE DE CREDENCIALES ── */
+.cred-helper {
+  position: fixed; bottom: 24px; right: 24px; width: 320px;
+  background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px);
+  border: 1px solid rgba(26, 138, 122, 0.2); border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15); z-index: 1000;
+  overflow: hidden; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ch-head { padding: 16px; background: rgba(26, 138, 122, 0.05); border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: flex-start; }
+.ch-info { flex: 1; }
+.ch-title { display: block; font-size: 13px; font-weight: 800; color: #1a1714; }
+.ch-sub   { display: block; font-size: 11px; color: #6b6560; margin-top: 2px; }
+.ch-close { background: none; border: none; font-size: 16px; color: #9a9490; cursor: pointer; padding: 4px; }
+.ch-close:hover { color: #1a1714; }
+
+.ch-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.ch-item label { display: block; font-size: 10px; font-weight: 700; color: #9a9490; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.ch-input-grp { display: flex; gap: 8px; }
+.ch-input-grp input {
+  flex: 1; height: 36px; padding: 0 12px; border-radius: 8px;
+  border: 1.5px solid #ede9e4; background: white;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #1a1714;
+}
+.btn-copy {
+  width: 36px; height: 36px; border-radius: 8px; border: none;
+  background: #1a8a7a; color: white; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .2s;
+}
+.btn-copy:hover { background: #1da898; transform: scale(1.05); }
+.btn-copy:active { transform: scale(0.95); }
+
+.ch-foot { padding: 12px 16px; background: #faf8f5; border-top: 1px solid #ede9e4; }
+.ch-foot p { font-size: 10px; color: #9a9490; margin: 0; line-height: 1.4; }
+
+/* Transitions */
+.slide-up-enter-active, .slide-up-leave-active { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%) scale(0.9); opacity: 0; }
+
+@keyframes slideUp { from { transform: translateY(100%) scale(0.9); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+
 /* ── RESPONSIVE ── */
 @media (max-width:1200px) { .trio-grid { grid-template-columns:1fr 1fr; } }
-@media (max-width:800px)  { .trio-grid,.duo-grid { grid-template-columns:1fr; } .main { padding:18px 20px; } .topbar { padding:0 20px; } }
+@media (max-width:800px)  { .trio-grid,.duo-grid { grid-template-columns:1fr; } .main { padding:18px 20px; } .topbar { padding:0 20px; } .cred-helper { right: 10px; left: 10px; bottom: 10px; width: auto; } }
 </style>

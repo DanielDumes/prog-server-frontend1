@@ -3,7 +3,7 @@
     <div class="modal-content">
       <header class="modal-header">
         <div class="mh-top">
-          <span class="mh-title">Detalle Histórico: {{ snap.server_label }}</span>
+          <span class="mh-title">Detalle Histórico: {{ snap.server_label }} <span class="mh-ip">({{ snap.server_host }})</span></span>
           <button class="btn-close" @click="$emit('close')">×</button>
         </div>
         <div class="mh-sub">Reporte del {{ formatTime(snap.timestamp) }} (iLO Snapshot)</div>
@@ -22,31 +22,16 @@
           <div class="panel panel--glow">
             <div class="panel-title">Inventario detectado</div>
             <div class="info-grid">
-              <div class="info-row"><span class="info-lbl">CPUs</span>  <span>{{ snap.systems_raw?.ProcessorSummary?.Count ?? '—' }} núcleos</span></div>
-              <div class="info-row"><span class="info-lbl">RAM</span>   <span>{{ snap.memory_data?.length ?? 0 }} DIMMs</span></div>
-              <div class="info-row"><span class="info-lbl">Discos</span><span>{{ snap.storage_data?.length ?? 0 }} Controladoras</span></div>
+              <div class="info-row"><span class="info-lbl">Modelo</span>  <span class="st-mono">{{ snap.systems_raw?.Model || 'N/A' }}</span></div>
+              <div class="info-row"><span class="info-lbl">Serie S/N</span><span class="st-mono">{{ snap.systems_raw?.SerialNumber || '—' }}</span></div>
+              <div class="info-row"><span class="info-lbl">CPUs</span>      <span>{{ snap.systems_raw?.ProcessorSummary?.Count ?? '—' }} núcleos</span></div>
+              <div class="info-row"><span class="info-lbl">RAM</span>       <span>{{ snap.memory_data?.length ?? 0 }} DIMMs ({{ snap.total_mem_gb }} GB)</span></div>
+              <div class="info-row"><span class="info-lbl">Cap. Disco</span><span>{{ snap.total_storage_gb }} GB</span></div>
             </div>
           </div>
         </div>
 
-        <div class="panel panel--glow" style="margin-top:20px" v-if="snap.storage_data?.length">
-          <div class="panel-title">Almacenamiento Histórico</div>
-          <div class="table-wrap">
-            <table class="report-table">
-              <thead><tr><th>Disco</th><th>Salud</th><th>Tipo</th><th>Capacidad</th></tr></thead>
-              <tbody>
-                <template v-for="ctrl in snap.storage_data" :key="ctrl.name">
-                  <tr v-for="d in ctrl.drives" :key="d.name">
-                    <td>{{ d.name }}</td>
-                    <td><span :class="healthCls(d.health)">{{ d.health }}</span></td>
-                    <td>{{ d.type }}</td>
-                    <td>{{ d.capacity_gb }} GB</td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <!-- Almacenamiento removido a petición del usuario para simplificar reporte -->
 
         <div class="panel panel--glow" style="margin-top:20px" v-if="snap.memory_data?.length">
           <div class="panel-title">Mapeo de RAM Histórico</div>
@@ -83,6 +68,7 @@ defineEmits(['close'])
 .modal-header  { padding:20px 24px 16px; border-bottom:1px solid var(--border); }
 .mh-top  { display:flex; align-items:center; justify-content:space-between; }
 .mh-title{ font-size:16px; font-weight:700; color:var(--text); }
+.mh-ip   { font-size:13px; font-weight:500; color:var(--text-4); margin-left:8px; font-family:'IBM Plex Mono', monospace; }
 .mh-sub  { font-size:11px; color:var(--text-4); margin-top:6px; }
 .btn-close { background:none; border:none; font-size:20px; color:var(--text-3); cursor:pointer; padding:0 4px; }
 .btn-close:hover { color:var(--text); }
@@ -94,6 +80,7 @@ defineEmits(['close'])
 .info-grid { display:flex; flex-direction:column; gap:10px; }
 .info-row  { display:flex; justify-content:space-between; align-items:center; font-size:13px; }
 .info-lbl  { color:var(--text-4); font-weight:500; }
+.st-mono   { font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-2); }
 .tc-ok   { color:var(--green-600); font-weight:600; }
 .tc-warn { color:var(--amber-600); font-weight:600; }
 .tc-crit { color:var(--red-600);   font-weight:600; }

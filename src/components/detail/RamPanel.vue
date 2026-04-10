@@ -27,7 +27,7 @@
       <span class="pf-val">{{ data.memory?.dimms?.[0]?.speed_mhz ?? '—' }} MHz</span>
       <span class="pf-sep">·</span>
       <span class="pf-label">Tipo</span>
-      <span class="pf-val">{{ data.memory?.dimms?.[0]?.type ?? 'DDR4' }}</span>
+      <span class="pf-val">{{ data.memory?.dimms?.[0]?.type ?? '—' }}</span>
     </footer>
   </div>
 </template>

@@ -77,6 +77,18 @@
     <div class="sc-foot">
       <span class="sc-time">{{ updatedAt ? `↻ ${updatedAt}` : '—' }}</span>
       <div class="sc-actions">
+        <button class="btn-console" @click.stop="openConsole" title="Consola Web (HTML5)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </button>
+        <button class="btn-console btn-console--jirc" @click.stop="launchJirc" title="Consola Directa (JNLP)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
         <button class="btn-delete" @click.stop="handleDelete" title="Eliminar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
@@ -109,6 +121,18 @@
     <div class="sl-error" v-else-if="error">{{ error }}</div>
     <div class="sl-loader" v-else-if="loading"><div class="spinner-xs"></div> Cargando…</div>
     <div class="sl-right">
+      <button class="btn-console btn-console--list" @click.stop="openConsole" title="Consola Web (HTML5)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+      </button>
+      <button class="btn-console btn-console--list btn-console--jirc-mini" @click.stop="launchJirc" title="Consola Directa (JNLP)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
       <button class="btn-delete" @click.stop="handleDelete" title="Eliminar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>
@@ -116,6 +140,21 @@
       </button>
       <span class="sc-cta">→</span>
     </div>
+
+    <!-- ── Asistente de Credenciales (Quick) ── -->
+    <Transition name="fade-in">
+      <div class="sc-cred-helper" v-if="showHelper && helperData" @click.stop="">
+        <button class="sch-close" @click.stop="showHelper = false">✕</button>
+        <div class="sch-row">
+          <span class="sch-val">{{ helperData.user }}</span>
+          <button @click.stop="copyToClipboard(helperData.user)" class="sch-btn" title="Copiar Usuario">USER</button>
+        </div>
+        <div class="sch-row">
+          <span class="sch-val">••••••••</span>
+          <button @click.stop="copyToClipboard(helperData.pass)" class="sch-btn sch-btn--pass" title="Copiar Contraseña">PASS</button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -129,12 +168,14 @@ import { REFRESH_INTERVAL_SEC } from '../config/servers.js'
 const props = defineProps({ server: Object, listMode: { type: Boolean, default: false } })
 const emit  = defineEmits(['select', 'status', 'deleted'])
 
-const { fetchSummary, deleteServer } = useIlo()
+const { fetchSummary, deleteServer, fetchCreds, getJircUrl } = useIlo()
 const data      = ref(null)
 const loading   = ref(true)
 const error     = ref(null)
 const updatedAt = ref('')
 const deleting      = ref(false)
+const helperData    = ref(null)
+const showHelper    = ref(false)
 let timer = null
 
 // ── Computed ─────────────────────────────────────────────────────
@@ -213,6 +254,25 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+async function openConsole() {
+  window.open(`https://${props.server.host}/`, '_blank')
+  try {
+    helperData.value = await fetchCreds(props.server.id)
+    showHelper.value = true
+  } catch (e) {
+    console.error("Error al obtener credenciales:", e)
+  }
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text)
+}
+
+function launchJirc() {
+  const url = getJircUrl(props.server.id)
+  window.location.href = url
 }
 
 async function handleDelete() {
@@ -368,11 +428,39 @@ defineExpose({ reload: load })
 .btn-delete:hover svg { stroke: var(--red-600); }
 .btn-delete svg { stroke: var(--text-4); transition: stroke .2s; }
 
-/* Delete confirm styles removed as we now use SweetAlert2 */
+.btn-console {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid transparent; background: rgba(26,138,122,0.06);
+  color: var(--green-600); cursor: pointer; transition: all .2s;
+}
+.btn-console:hover { background: rgba(26,138,122,0.12); border-color: rgba(26,138,122,0.3); transform: scale(1.05); }
+.btn-console--jirc { color: #8e44ad; border-color: #8e44ad; }
+.btn-console--jirc:hover { background: rgba(142,68,173,0.1); border-color: #9b59b6; }
+.btn-console--jirc-mini { color: #8e44ad; }
+.btn-console--list { width: 32px; height: 32px; }
 
-/* ══════════════════════════════════════
-   LIST ROW
-══════════════════════════════════════ */
+/* ── QUICK CRED HELPER ── */
+.sc-cred-helper {
+  position: absolute; inset: 0; background: rgba(26, 138, 122, 0.95);
+  backdrop-filter: blur(4px); z-index: 50;
+  display: flex; flex-direction: column; justify-content: center; padding: 20px; gap: 10px;
+  color: white; border-radius: 14px;
+}
+.sl .sc-cred-helper { border-radius: 10px; flex-direction: row; align-items: center; padding: 0 20px; }
+
+.sch-close { position: absolute; top: 10px; right: 10px; background: none; border: none; color: white; cursor: pointer; opacity: 0.7; }
+.sch-close:hover { opacity: 1; }
+
+.sch-row { display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 6px; }
+.sl .sch-row { flex: 1; }
+.sch-val { font-family: 'JetBrains Mono'; font-size: 11px; }
+.sch-btn { background: white; color: #1a8a7a; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 800; cursor: pointer; transition: all .2s; }
+.sch-btn:hover { background: #e6f5f2; transform: scale(1.05); }
+.sch-btn--pass { background: #1a1714; color: white; }
+
+.fade-in-enter-active, .fade-in-leave-active { transition: opacity 0.3s; }
+.fade-in-enter-from, .fade-in-leave-to { opacity: 0; }
 .sl {
   display: flex; align-items: center; gap: 16px; padding: 14px 18px;
   background: var(--grad-surface); border: 1px solid var(--border); border-radius: 10px;
