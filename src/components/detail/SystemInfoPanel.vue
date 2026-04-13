@@ -4,7 +4,7 @@
       <div class="ph-mark ph-mark--slate"></div>
       <div class="ph-text">
         <span class="ph-title">Ficha del sistema</span>
-        <span class="ph-meta">HPE ProLiant · iLO 5</span>
+        <span class="ph-meta">HPE ProLiant Server</span>
       </div>
     </header>
     <div class="panel-body">
@@ -14,7 +14,7 @@
         <div class="it-row"><span class="it-lbl">Versión BIOS</span><span class="it-val mono">{{ data.summary?.bios_version ?? 'N/A' }}</span></div>
         <div class="it-row"><span class="it-lbl">IP iLO</span><span class="it-val mono">{{ server.host }}</span></div>
         <div class="it-row"><span class="it-lbl">Procesadores</span><span class="it-val">{{ data.summary?.cpu_count ?? '—' }} instalados</span></div>
-        <div class="it-row"><span class="it-lbl">Memoria total</span><span class="it-val">{{ data.summary?.memory_gib ?? '—' }} GB DDR4</span></div>
+        <div class="it-row"><span class="it-lbl">Memoria total</span><span class="it-val">{{ data.summary?.memory_gib ?? '—' }} GB</span></div>
       </div>
     </div>
   </div>

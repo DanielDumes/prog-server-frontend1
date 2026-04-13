@@ -24,16 +24,28 @@
       </div>
     </div>
 
-    <!-- Consumo Activo -->
+    <!-- Consumo Activo o Memoria RAM (iLO 4) -->
     <div class="hero-tile tile--info">
-      <div class="tile-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      </div>
-      <div class="tile-body">
-        <div class="tile-label">Consumo Activo</div>
-        <div class="tile-value">{{ data.power?.consumed_watts ?? '—' }}<small> W</small></div>
-        <div class="tile-sub">Cap. {{ data.power?.capacity_watts ?? '?' }} W</div>
-      </div>
+      <template v-if="!isIlo4MissingPower">
+        <div class="tile-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <div class="tile-body">
+          <div class="tile-label">Consumo Activo</div>
+          <div class="tile-value">{{ data.power?.consumed_watts ?? '—' }}<small> W</small></div>
+          <div class="tile-sub">Cap. {{ data.power?.capacity_watts ?? '?' }} W</div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="tile-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 5V3M10 5V3M14 5V3M18 5V3M6 19v2M10 19v2M14 19v2M18 19v2"/></svg>
+        </div>
+        <div class="tile-body">
+          <div class="tile-label">Memoria RAM</div>
+          <div class="tile-value">{{ data.summary?.memory_gib ?? '—' }}<small> GB</small></div>
+          <div class="tile-sub">Memoria disponible</div>
+        </div>
+      </template>
     </div>
 
     <!-- Temperatura Ambiente -->
@@ -51,11 +63,18 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+const props = defineProps({
   data:           { type: Object,  required: true },
   ambientTemp:    { type: Number,  default: null  },
   ambientTempName:{ type: String,  default: ''    },
   ambientTempCls: { type: String,  default: ''    },
+})
+
+const isIlo4MissingPower = computed(() => {
+  const isIlo4 = props.data.ilo_gen === 4 || (props.data.summary?.model || '').toUpperCase().includes('GEN8') || (props.data.summary?.model || '').toUpperCase().includes('GEN9')
+  const hasNoPower = !props.data.power?.consumed_watts || props.data.power?.consumed_watts === 0
+  return isIlo4 && hasNoPower
 })
 
 function healthLabel(h) { return { OK: 'Óptimo', Warning: 'Advertencia', Critical: 'Crítico' }[h] ?? h ?? '—' }

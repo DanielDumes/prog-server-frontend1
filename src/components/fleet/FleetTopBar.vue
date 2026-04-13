@@ -1,5 +1,6 @@
 <template>
   <header class="topbar">
+    <div class="top-loader-bar" v-if="loading"></div>
     <div class="topbar-brand">
       <div class="brand-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -11,7 +12,7 @@
       </div>
       <div>
         <div class="brand-title">Control Center</div>
-        <div class="brand-sub">HPE iLO 5 · <span class="brand-count">{{ serverCount }} nodos</span></div>
+        <div class="brand-sub">HPE iLO  · <span class="brand-count">{{ serverCount }} nodos</span></div>
       </div>
     </div>
 
@@ -20,16 +21,6 @@
         <span class="live-dot"></span>LIVE
       </div>
 
-      <div class="countdown-pill" v-if="countdownSec > 0">
-        <svg viewBox="0 0 28 28" width="18" height="18">
-          <circle cx="14" cy="14" r="11" fill="none" stroke="#ddd8d0" stroke-width="2.5"/>
-          <circle cx="14" cy="14" r="11" fill="none" stroke="#1a8a7a" stroke-width="2.5"
-            stroke-linecap="round"
-            :stroke-dasharray="`${countdownPct * 69.1 / 100} 69.1`"
-            transform="rotate(-90 14 14)"/>
-        </svg>
-        <span>{{ countdownSec }}s</span>
-      </div>
 
       <span class="last-refresh" v-if="lastRefresh">↺ {{ lastRefresh }}</span>
 
@@ -64,8 +55,6 @@
 defineProps({
   serverCount:  { type: Number,  default: 0     },
   loading:      { type: Boolean, default: false  },
-  countdownSec: { type: Number,  default: 0     },
-  countdownPct: { type: Number,  default: 0     },
   lastRefresh:  { type: String,  default: ''    },
 })
 defineEmits(['open-reports', 'reload-all', 'add-server'])
@@ -85,7 +74,6 @@ defineEmits(['open-reports', 'reload-all', 'add-server'])
 .live-pill { display:flex; align-items:center; gap:5px; background:#e6f5ee; border:1px solid #b8e4d8; padding:3px 9px; border-radius:20px; font-size:9px; font-weight:800; color:#0f6e44; letter-spacing:.08em; }
 .live-dot { width:5px; height:5px; border-radius:50%; background:#1a8a7a; animation:pulse-dot 1.5s infinite; }
 @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:.5} }
-.countdown-pill { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#6b6560; background:#f5f2ee; border:1px solid #ddd8d0; padding:4px 10px; border-radius:20px; }
 .last-refresh { font-size:10px; color:#9a9490; font-family:'IBM Plex Mono',monospace; }
 .btn-icon { display:flex; align-items:center; gap:6px; font-family:'Sora',sans-serif; font-size:12px; font-weight:600; padding:7px 13px; border-radius:8px; border:1.5px solid #ddd8d0; background:white; color:#6b6560; cursor:pointer; transition:all .15s; letter-spacing:.02em; }
 .btn-icon:hover { background:#f5f2ee; border-color:#b0aba3; color:#1a1714; }
@@ -93,6 +81,8 @@ defineEmits(['open-reports', 'reload-all', 'add-server'])
 .btn-primary { display:flex; align-items:center; gap:6px; font-family:'Sora',sans-serif; font-size:12px; font-weight:700; padding:7px 15px; border-radius:8px; background:#1a1714; color:#f5f2ee; border:none; cursor:pointer; transition:all .15s; letter-spacing:.02em; }
 .btn-primary:hover { background:#2d2925; }
 .spin { display:inline-block; animation:spin .8s linear infinite; }
+.top-loader-bar { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, #1a8a7a, transparent); background-size: 200% 100%; animation: loader-flow 1.5s infinite linear; z-index: 110; border-radius: 2px 2px 0 0; }
+@keyframes loader-flow { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:768px) { .topbar { padding:0 16px; } }
 @media (max-width:640px) { .topbar { height:auto; padding:12px 16px; flex-wrap:wrap; } }

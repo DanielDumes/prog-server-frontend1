@@ -5,8 +5,6 @@
     <FleetTopBar
       :server-count="servers.length"
       :loading="loading"
-      :countdown-sec="countdownSec"
-      :countdown-pct="countdownPct"
       :last-refresh="lastRefresh"
       @open-reports="$emit('open-reports')"
       @reload-all="reloadAll"
@@ -115,13 +113,7 @@ const gridMode     = ref('grid')
 const activeFilter = ref('all')
 const sortBy       = ref('name')
 
-let cdTimer = null
-const countdownSec = ref(REFRESH_INTERVAL_SEC)
 
-const countdownPct = computed(() => {
-  const t = REFRESH_INTERVAL_SEC
-  return ((t - countdownSec.value) / t) * 100
-})
 
 const stats = computed(() => {
   const s = { ok: 0, warn: 0, crit: 0, off: 0 }
@@ -218,16 +210,14 @@ function updateStatus(id, status) { statusMap.value[id] = status }
 function reloadAll() {
   Object.values(cardRefs.value).forEach(c => c?.reload?.())
   lastRefresh.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
-  countdownSec.value = REFRESH_INTERVAL_SEC
 }
 
 onMounted(() => {
   loadServers()
   lastRefresh.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
-  cdTimer = setInterval(() => { countdownSec.value = Math.max(0, countdownSec.value - 1) }, 1000)
 })
 watch(() => props.refreshCount, () => { reloadAll() })
-onUnmounted(() => clearInterval(cdTimer))
+onUnmounted(() => { })
 </script>
 
 <style scoped>

@@ -6,7 +6,7 @@
         <span class="ph-title">Procesador</span>
         <span class="ph-meta">{{ data.summary?.cpu_count ?? '?' }} núcleos físicos</span>
       </div>
-      <div class="ph-chip" :class="maxCpuReading > 75 ? 'chip--red' : maxCpuReading > 60 ? 'chip--amber' : 'chip--teal'">
+      <div class="ph-chip" :class="'chip--' + maxCpuStatus">
         {{ maxCpuReading }}°C
       </div>
     </header>
@@ -40,9 +40,9 @@
 
       <div class="sensor-list" v-if="cpuTempSensors.length">
         <div class="sensor-row" v-for="s in cpuTempSensors" :key="s.name">
-          <span class="s-led" :class="'led--' + tempClsStr(s)"></span>
+          <span class="s-led" :class="'led--' + getSensorStatus(s)"></span>
           <span class="s-name">{{ s.name.replace('CPU ', '') }}</span>
-          <span class="s-val" :class="'sval--' + tempClsStr(s)">{{ s.reading_c }}°</span>
+          <span class="s-val" :class="'sval--' + getSensorStatus(s)">{{ s.reading_c }}°</span>
         </div>
       </div>
     </div>
@@ -62,22 +62,35 @@ const props = defineProps({ data: { type: Object, required: true } })
 const cpuTempSensors = computed(() =>
   (props.data?.temperatures ?? []).filter(t => t.name?.toLowerCase().includes('cpu'))
 )
+
 const maxCpuReading = computed(() => {
   const v = cpuTempSensors.value.map(s => s.reading_c).filter(v => v != null)
   return v.length ? Math.max(...v) : 0
 })
-const cpuArcColor = computed(() =>
-  maxCpuReading.value > 75 ? '#c0392b' : maxCpuReading.value > 60 ? '#e67e22' : '#1a8a7a'
-)
 
-function tempClsStr(t) {
-  if (!t.reading_c) return 'ok'
-  if (t.upper_critical && t.reading_c >= t.upper_critical) return 'crit'
-  if (t.upper_caution  && t.reading_c >= t.upper_caution)  return 'warn'
-  if (t.reading_c > 85) return 'crit'
-  if (t.reading_c > 70) return 'warn'
+function getSensorStatus(s) {
+  if (!s.reading_c) return 'ok'
+  // 1. Prioridad: Umbrales reales del hardware (iLO)
+  if (s.upper_critical && s.reading_c >= s.upper_critical) return 'crit'
+  if (s.upper_caution  && s.reading_c >= s.upper_caution)  return 'warn'
+  // 2. Fallback: Límites técnicos suaves para sensores sin umbral
+  if (s.reading_c >= 90) return 'crit'
+  if (s.reading_c >= 75) return 'warn'
   return 'ok'
 }
+
+const maxCpuStatus = computed(() => {
+  if (!cpuTempSensors.value.length) return 'teal'
+  const statuses = cpuTempSensors.value.map(getSensorStatus)
+  if (statuses.includes('crit')) return 'red'
+  if (statuses.includes('warn')) return 'amber'
+  return 'teal'
+})
+
+const cpuArcColor = computed(() => {
+  const status = maxCpuStatus.value
+  return status === 'red' ? '#c0392b' : status === 'amber' ? '#e67e22' : '#1a8a7a'
+})
 </script>
 
 <style scoped>

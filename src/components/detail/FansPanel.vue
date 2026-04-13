@@ -22,7 +22,7 @@
                 {{ f.rpm }}<span class="rpm-unit"> {{ f.displayUnits }}</span>
               </template>
               <template v-else>
-                <span class="rpm-na">N/A</span>
+                <span class="rpm-na">{{ isIlo4 ? 'OK' : 'N/A' }}</span>
               </template>
             </div>
           </div>
@@ -50,6 +50,12 @@ const activeFans = computed(() =>
     displayUnits: f.units === 'Percent' ? '%' : (f.units || 'RPM')
   }))
 )
+
+const isIlo4 = computed(() => {
+  if (props.data.ilo_gen === 4) return true
+  const model = (props.data.summary?.model || '').toUpperCase().replace(/ /g, '').replace(/-/g, '')
+  return model.includes('GEN8') || model.includes('GEN9')
+})
 
 function fanDuration(val, units) {
   if (val == null || val === 0) return '2s'

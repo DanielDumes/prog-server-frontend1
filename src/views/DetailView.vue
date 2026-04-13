@@ -16,24 +16,17 @@
         </span>
       </div>
       <div class="topbar-right">
-        <span class="last-sync" v-if="lastUpdate">↺ {{ lastUpdate }}</span>
-        <button class="btn-console-main" @click="openConsole" title="Consola Web (HTML5)">
+        <span class="last-sync" v-if="lastUpdate" :class="{ 'sync--refreshing': loading }">
+          <span class="sync-dot" v-if="loading"></span>
+          ↺ {{ lastUpdate }}
+        </span>
+        <button class="btn-console-main" @click="openConsole" title="Acceso iLO (HTML5)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
             <line x1="8" y1="21" x2="16" y2="21"/>
             <line x1="12" y1="17" x2="12" y2="21"/>
           </svg>
-          Consola Web
-        </button>
-        <button class="btn-console-main btn-console-jirc-main" @click="launchJirc" title="Consola Directa (Zero-Login)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Consola Directa
-        </button>
-        <button class="btn-sync" @click="load" :disabled="loading">
-          <span :class="{ spin: loading }">⟳</span>
-          {{ loading ? 'Cargando…' : 'Sincronizar' }}
+          Acceso iLO
         </button>
       </div>
     </header>
@@ -80,44 +73,6 @@
       </section>
     </main>
 
-    <!-- ── Asistente de Credenciales ── -->
-    <Transition name="slide-up">
-      <div class="cred-helper" v-if="showHelper && helperData">
-        <header class="ch-head">
-          <div class="ch-info">
-            <span class="ch-title">Asistente de Acceso</span>
-            <span class="ch-sub">Copia las credenciales para iLO</span>
-          </div>
-          <button class="ch-close" @click="showHelper = false">✕</button>
-        </header>
-        
-        <div class="ch-body">
-          <div class="ch-item">
-            <label>Usuario</label>
-            <div class="ch-input-grp">
-              <input readonly :value="helperData.user" />
-              <button @click="copyToClipboard(helperData.user, 'usuario')" class="btn-copy" title="Copiar Usuario">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="ch-item">
-            <label>Contraseña</label>
-            <div class="ch-input-grp">
-              <input type="password" readonly :value="helperData.pass" />
-              <button @click="copyToClipboard(helperData.pass, 'contraseña')" class="btn-copy" title="Copiar Contraseña">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <footer class="ch-foot">
-          <p>Utiliza estas credenciales en la pestaña que se acaba de abrir.</p>
-        </footer>
-      </div>
-    </Transition>
   </div>
 </template>
 
@@ -137,13 +92,12 @@ import SystemInfoPanel from '../components/detail/SystemInfoPanel.vue'
 const props = defineProps({ server: Object, refreshCount: Number })
 defineEmits(['back'])
 
-const { fetchAll, fetchCreds, getJircUrl } = useIlo()
+const { fetchAll } = useIlo()
 const data       = ref(null)
 const loading    = ref(true)
 const error      = ref(null)
 const lastUpdate = ref('')
-const helperData = ref(null)
-const showHelper = ref(false)
+
 let autoTimer    = null
 
 // ── Computed para HeroStrip ───────────────────────────────────────
@@ -177,32 +131,26 @@ const ambientTempCls = computed(() => {
 function healthLabel(h) { return { OK: 'Óptimo', Warning: 'Advertencia', Critical: 'Crítico' }[h] ?? h ?? '—' }
 function healthCls(h)   { return { OK: 'ok', Warning: 'warn', Critical: 'crit' }[h] ?? '' }
 
-// ── Data loading ──────────────────────────────────────────────────
+// ── DATA LOADING ──────────────────────────────────────────────────
 async function load() {
   loading.value = true; error.value = null
   try {
     data.value = await fetchAll(props.server)
     lastUpdate.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
-  } catch (e) { error.value = `Error al conectar: ${e.message}` }
-  finally { loading.value = false }
+  } catch (e) { 
+    error.value = `Error: ${e.message}`
+  } finally { 
+    loading.value = false 
+  }
 }
 
 async function openConsole() {
   window.open(`https://${props.server.host}/`, '_blank')
-  try {
-    helperData.value = await fetchCreds(props.server.id)
-    showHelper.value = true
-  } catch (e) { console.error("Error al obtener credenciales:", e) }
 }
 
 function copyToClipboard(text, label) {
   navigator.clipboard.writeText(text)
   // Opcional: podrías disparar un toast aquí si tuvieras un sistema de notificaciones
-}
-
-function launchJirc() {
-  const url = getJircUrl(props.server.id)
-  window.location.href = url
 }
 
 // Bug fix: responder al refreshCount del padre (socket events)
@@ -232,7 +180,10 @@ onUnmounted(() => { clearInterval(autoTimer) })
 .ht--warn { background:#fef3e6; color:#854f0b; } .ht--warn .ht-dot { background:#e67e22; }
 .ht--crit { background:#fdecea; color:#a32d2d; } .ht--crit .ht-dot { background:#c0392b; animation:blink 1s infinite; }
 .topbar-right { margin-left:auto; display:flex; align-items:center; gap:12px; }
-.last-sync { font-size:11px; color:#9a9490; font-weight:500; }
+.last-sync { font-size:11px; color:#9a9490; font-weight:500; display:flex; align-items:center; gap:6px; }
+.sync--refreshing { color: #1a8a7a; }
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #1a8a7a; animation: sync-blink 1s infinite; }
+@keyframes sync-blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } }
 .btn-sync { display:flex; align-items:center; gap:7px; font-family:'Sora',sans-serif; font-size:12px; font-weight:700; padding:8px 18px; border-radius:8px; background:#1a1714; color:#f5f2ee; border:none; cursor:pointer; letter-spacing:.02em; transition:all .15s; }
 .btn-sync:hover { background:#2d2925; }
 .btn-sync:disabled { opacity:.5; cursor:not-allowed; }
@@ -275,40 +226,6 @@ onUnmounted(() => { clearInterval(autoTimer) })
 @keyframes slide { 0%{transform:translateX(-100%)} 50%{transform:translateX(200%)} 100%{transform:translateX(-100%)} }
 .spin { display:inline-block; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
-
-/* ── ASISTENTE DE CREDENCIALES ── */
-.cred-helper {
-  position: fixed; bottom: 24px; right: 24px; width: 320px;
-  background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px);
-  border: 1px solid rgba(26, 138, 122, 0.2); border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15); z-index: 1000;
-  overflow: hidden; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.ch-head { padding: 16px; background: rgba(26, 138, 122, 0.05); border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: flex-start; }
-.ch-info { flex: 1; }
-.ch-title { display: block; font-size: 13px; font-weight: 800; color: #1a1714; }
-.ch-sub   { display: block; font-size: 11px; color: #6b6560; margin-top: 2px; }
-.ch-close { background: none; border: none; font-size: 16px; color: #9a9490; cursor: pointer; padding: 4px; }
-.ch-close:hover { color: #1a1714; }
-
-.ch-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-.ch-item label { display: block; font-size: 10px; font-weight: 700; color: #9a9490; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.ch-input-grp { display: flex; gap: 8px; }
-.ch-input-grp input {
-  flex: 1; height: 36px; padding: 0 12px; border-radius: 8px;
-  border: 1.5px solid #ede9e4; background: white;
-  font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #1a1714;
-}
-.btn-copy {
-  width: 36px; height: 36px; border-radius: 8px; border: none;
-  background: #1a8a7a; color: white; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: all .2s;
-}
-.btn-copy:hover { background: #1da898; transform: scale(1.05); }
-.btn-copy:active { transform: scale(0.95); }
-
-.ch-foot { padding: 12px 16px; background: #faf8f5; border-top: 1px solid #ede9e4; }
-.ch-foot p { font-size: 10px; color: #9a9490; margin: 0; line-height: 1.4; }
 
 /* Transitions */
 .slide-up-enter-active, .slide-up-leave-active { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }

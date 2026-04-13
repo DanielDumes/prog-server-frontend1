@@ -36,11 +36,11 @@
                 <div class="drive-meta">
                   <span class="drive-name">{{ d.name }}</span>
                   <div class="drive-sub">
-                    <span class="drive-model">{{ d.model }}</span>
+                    <span class="drive-model">{{ (d.model === 'N/A' && isIlo4) ? 'Disco ProLiant' : d.model }}</span>
                     <span class="drive-slot" v-if="d.slot">| {{ d.slot }}</span>
                   </div>
                 </div>
-                <span class="drive-cap">{{ d.capacity_gb }} GB</span>
+                <span class="drive-cap">{{ (d.capacity_gb === 0 && isIlo4) ? 'OK' : d.capacity_gb + ' GB' }}</span>
                 <span class="drive-health" :class="d.health === 'OK' ? 'st--ok' : 'st--warn'">{{ d.health }}</span>
               </div>
             </div>
@@ -54,6 +54,12 @@
 <script setup>
 import { computed } from 'vue'
 const props = defineProps({ data: { type: Object, required: true } })
+
+const isIlo4 = computed(() => {
+  if (props.data.ilo_gen === 4) return true
+  const model = (props.data.summary?.model || '').toUpperCase().replace(/ /g, '').replace(/-/g, '')
+  return model.includes('GEN8') || model.includes('GEN9')
+})
 
 const storageControllers = computed(() => {
   return (props.data.storage?.controllers ?? []).filter(c => c.groups?.length)

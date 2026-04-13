@@ -9,7 +9,7 @@
       <div class="sc-identity">
         <div class="sc-name">{{ server.label }}</div>
         <div class="sc-ip">
-          <span class="ip-dot" :class="statusCls"></span>
+          <span class="ip-dot" :class="[statusCls, { 'ip-dot--refresh': loading }]"></span>
           {{ server.host }}
         </div>
       </div>
@@ -22,14 +22,14 @@
     <!-- Model -->
     <div class="sc-model" v-if="data?.summary?.model">{{ data.summary.model }}</div>
 
-    <!-- Loading state -->
-    <div class="sc-loader" v-if="loading">
+    <!-- Loading state (Solo primer arranque) -->
+    <div class="sc-loader" v-if="loading && !data">
       <div class="spinner"></div>
       <span>Consultando iLO…</span>
     </div>
 
-    <!-- Error state -->
-    <div class="sc-error" v-else-if="error">
+    <!-- Error state (Si no hay datos previos) -->
+    <div class="sc-error" v-else-if="error && !data">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
         <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -37,8 +37,8 @@
       <span>{{ error }}</span>
     </div>
 
-    <!-- Metrics grid -->
-    <div class="sc-metrics" v-else-if="data">
+    <!-- Metrics grid (Visible si hay datos, incluso si está cargando) -->
+    <div class="sc-metrics" v-if="data">
       <div class="met">
         <span class="mv" :class="data.summary?.power_state === 'On' ? 'mv--ok' : 'mv--muted'">
           {{ data.summary?.power_state ?? '—' }}
@@ -51,7 +51,7 @@
       </div>
       <div class="met">
         <span class="mv mv--blue">
-          {{ data.power?.consumed_watts ?? '—' }}<small v-if="data.power?.consumed_watts"> W</small>
+          {{ isIlo4MissingPower ? 'OK' : (data.power?.consumed_watts ?? '—') }}<small v-if="data.power?.consumed_watts && !isIlo4MissingPower"> W</small>
         </span>
         <span class="ml">Consumo</span>
       </div>
@@ -69,7 +69,7 @@
         v-for="f in data.fans" :key="f.name"
         class="fan-dot"
         :class="f.health === 'OK' ? 'fd--ok' : 'fd--warn'"
-        :title="`${f.name}: ${f.rpm != null ? f.rpm + ' RPM' : 'N/A'}`"
+        :title="`${f.name}: ${f.rpm != null ? f.rpm + (f.units || ' RPM') : (data.ilo_gen === 4 ? 'OK' : 'N/A')}`"
       ></div>
     </div>
 
@@ -77,16 +77,11 @@
     <div class="sc-foot">
       <span class="sc-time">{{ updatedAt ? `↻ ${updatedAt}` : '—' }}</span>
       <div class="sc-actions">
-        <button class="btn-console" @click.stop="openConsole" title="Consola Web (HTML5)">
+        <button class="btn-console" @click.stop="openConsole" title="Acceso iLO (HTML5)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
             <line x1="8" y1="21" x2="16" y2="21"/>
             <line x1="12" y1="17" x2="12" y2="21"/>
-          </svg>
-        </button>
-        <button class="btn-console btn-console--jirc" @click.stop="launchJirc" title="Consola Directa (JNLP)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </button>
         <button class="btn-delete" @click.stop="handleDelete" title="Eliminar">
@@ -111,26 +106,21 @@
       <HealthPill v-if="data && !loading" :health="data.summary?.health" />
       <div class="sc-loading-pill" v-else-if="loading"><div class="spinner-xs"></div></div>
     </div>
-    <div class="sl-metrics" v-if="data && !error">
+    <div class="sl-metrics" v-if="data">
       <div class="sl-met"><span class="slm-v" :class="data.summary?.power_state === 'On' ? 'mv--ok' : 'mv--muted'">{{ data.summary?.power_state ?? '—' }}</span><span class="slm-l">Power</span></div>
       <div class="sl-met"><span class="slm-v" :class="tempCls">{{ displayTemp !== null ? displayTemp + '°C' : '—' }}</span><span class="slm-l">Ambiente</span></div>
-      <div class="sl-met"><span class="slm-v mv--blue">{{ data.power?.consumed_watts ? data.power.consumed_watts + ' W' : '—' }}</span><span class="slm-l">Watts</span></div>
+      <div class="sl-met"><span class="slm-v mv--blue">{{ isIlo4MissingPower ? 'OK' : (data.power?.consumed_watts ? data.power.consumed_watts + ' W' : '—') }}</span><span class="slm-l">Consumo</span></div>
       <div class="sl-met"><span class="slm-v">{{ data.summary?.memory_gib ? data.summary.memory_gib + ' GB' : '—' }}</span><span class="slm-l">RAM</span></div>
       <div class="sl-met"><span class="slm-v">{{ data.summary?.cpu_count ?? '—' }}</span><span class="slm-l">CPUs</span></div>
     </div>
-    <div class="sl-error" v-else-if="error">{{ error }}</div>
-    <div class="sl-loader" v-else-if="loading"><div class="spinner-xs"></div> Cargando…</div>
+    <div class="sl-error" v-else-if="error && !data">{{ error }}</div>
+    <div class="sl-loader" v-else-if="loading && !data"><div class="spinner-xs"></div> Cargando…</div>
     <div class="sl-right">
-      <button class="btn-console btn-console--list" @click.stop="openConsole" title="Consola Web (HTML5)">
+      <button class="btn-console btn-console--list" @click.stop="openConsole" title="Acceso iLO (HTML5)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
           <line x1="8" y1="21" x2="16" y2="21"/>
           <line x1="12" y1="17" x2="12" y2="21"/>
-        </svg>
-      </button>
-      <button class="btn-console btn-console--list btn-console--jirc-mini" @click.stop="launchJirc" title="Consola Directa (JNLP)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
       </button>
       <button class="btn-delete" @click.stop="handleDelete" title="Eliminar">
@@ -141,20 +131,6 @@
       <span class="sc-cta">→</span>
     </div>
 
-    <!-- ── Asistente de Credenciales (Quick) ── -->
-    <Transition name="fade-in">
-      <div class="sc-cred-helper" v-if="showHelper && helperData" @click.stop="">
-        <button class="sch-close" @click.stop="showHelper = false">✕</button>
-        <div class="sch-row">
-          <span class="sch-val">{{ helperData.user }}</span>
-          <button @click.stop="copyToClipboard(helperData.user)" class="sch-btn" title="Copiar Usuario">USER</button>
-        </div>
-        <div class="sch-row">
-          <span class="sch-val">••••••••</span>
-          <button @click.stop="copyToClipboard(helperData.pass)" class="sch-btn sch-btn--pass" title="Copiar Contraseña">PASS</button>
-        </div>
-      </div>
-    </Transition>
   </div>
 </template>
 
@@ -168,15 +144,21 @@ import { REFRESH_INTERVAL_SEC } from '../config/servers.js'
 const props = defineProps({ server: Object, listMode: { type: Boolean, default: false } })
 const emit  = defineEmits(['select', 'status', 'deleted'])
 
-const { fetchSummary, deleteServer, fetchCreds, getJircUrl } = useIlo()
+const { fetchSummary, deleteServer } = useIlo()
 const data      = ref(null)
 const loading   = ref(true)
 const error     = ref(null)
 const updatedAt = ref('')
 const deleting      = ref(false)
-const helperData    = ref(null)
-const showHelper    = ref(false)
+
 let timer = null
+
+const isIlo4MissingPower = computed(() => {
+  if (!data.value) return false
+  const isIlo4 = data.value.ilo_gen === 4 || (data.value.summary?.model || '').toUpperCase().includes('GEN8') || (data.value.summary?.model || '').toUpperCase().includes('GEN9')
+  const hasNoPower = !data.value.power?.consumed_watts || data.value.power?.consumed_watts === 0
+  return isIlo4 && hasNoPower
+})
 
 // ── Computed ─────────────────────────────────────────────────────
 const displayTemp = computed(() => {
@@ -258,22 +240,12 @@ async function load() {
 
 async function openConsole() {
   window.open(`https://${props.server.host}/`, '_blank')
-  try {
-    helperData.value = await fetchCreds(props.server.id)
-    showHelper.value = true
-  } catch (e) {
-    console.error("Error al obtener credenciales:", e)
-  }
 }
 
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text)
 }
 
-function launchJirc() {
-  const url = getJircUrl(props.server.id)
-  window.location.href = url
-}
 
 async function handleDelete() {
   const result = await Swal.fire({
@@ -370,6 +342,9 @@ defineExpose({ reload: load })
 .ip--crit    { background: var(--red-600);   box-shadow: 0 0 8px var(--red-600); animation: pulse 1.5s ease infinite; }
 .ip--off     { background: var(--gray-400); }
 .ip--unknown { background: var(--gray-400); }
+.ip-dot--refresh { animation: ip-refresh 1.2s ease-in-out infinite !important; }
+
+@keyframes ip-refresh { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.4); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
 .sc-loading-pill { display: flex; align-items: center; }
@@ -439,25 +414,6 @@ defineExpose({ reload: load })
 .btn-console--jirc:hover { background: rgba(142,68,173,0.1); border-color: #9b59b6; }
 .btn-console--jirc-mini { color: #8e44ad; }
 .btn-console--list { width: 32px; height: 32px; }
-
-/* ── QUICK CRED HELPER ── */
-.sc-cred-helper {
-  position: absolute; inset: 0; background: rgba(26, 138, 122, 0.95);
-  backdrop-filter: blur(4px); z-index: 50;
-  display: flex; flex-direction: column; justify-content: center; padding: 20px; gap: 10px;
-  color: white; border-radius: 14px;
-}
-.sl .sc-cred-helper { border-radius: 10px; flex-direction: row; align-items: center; padding: 0 20px; }
-
-.sch-close { position: absolute; top: 10px; right: 10px; background: none; border: none; color: white; cursor: pointer; opacity: 0.7; }
-.sch-close:hover { opacity: 1; }
-
-.sch-row { display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 6px; }
-.sl .sch-row { flex: 1; }
-.sch-val { font-family: 'JetBrains Mono'; font-size: 11px; }
-.sch-btn { background: white; color: #1a8a7a; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 800; cursor: pointer; transition: all .2s; }
-.sch-btn:hover { background: #e6f5f2; transform: scale(1.05); }
-.sch-btn--pass { background: #1a1714; color: white; }
 
 .fade-in-enter-active, .fade-in-leave-active { transition: opacity 0.3s; }
 .fade-in-enter-from, .fade-in-leave-to { opacity: 0; }

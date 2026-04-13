@@ -4,7 +4,7 @@
       <div class="ph-mark ph-mark--amber"></div>
       <div class="ph-text">
         <span class="ph-title">Fuente de Poder</span>
-        <span class="ph-meta">{{ powerPct.toFixed(0) }}% carga actual</span>
+        <span class="ph-meta">{{ needsPulse ? 'Estado Nominal' : powerPct.toFixed(0) + '% carga actual' }}</span>
       </div>
     </header>
 
@@ -13,13 +13,16 @@
         <svg viewBox="0 0 180 100" class="gauge-svg">
           <path d="M 18 90 A 72 72 0 0 1 162 90" fill="none" stroke="#e8e4df" stroke-width="10" stroke-linecap="round"/>
           <path d="M 18 90 A 72 72 0 0 1 162 90" fill="none"
-            :stroke="powerPct > 85 ? '#c0392b' : powerPct > 65 ? '#e67e22' : '#1a8a7a'"
+            :stroke="needsPulse ? '#2ecc71' : (powerPct > 85 ? '#c0392b' : powerPct > 65 ? '#e67e22' : '#1a8a7a')"
             stroke-width="10" stroke-linecap="round"
-            :stroke-dasharray="`${(powerPct / 100) * 226} 226`"/>
+            :stroke-dasharray="`${(powerPct / 100) * 226} 226`"
+            :class="{'pulse-stroke': needsPulse}"/>
           <text x="90" y="83" text-anchor="middle" font-size="30" font-weight="700"
-            :fill="powerPct > 85 ? '#c0392b' : '#1a3a34'"
-            font-family="'IBM Plex Mono', monospace" letter-spacing="-1">{{ data.power?.consumed_watts ?? '—' }}</text>
-          <text x="90" y="97" text-anchor="middle" font-size="9" fill="#9a9490" font-family="'Sora', system-ui" letter-spacing="1.5">WATTS ACTIVOS</text>
+            :fill="needsPulse ? '#27ae60' : (powerPct > 85 ? '#c0392b' : '#1a3a34')"
+            font-family="'IBM Plex Mono', monospace" letter-spacing="-1">{{ needsPulse ? 'OK' : (data.power?.consumed_watts ?? '—') }}</text>
+          <text x="90" y="97" text-anchor="middle" font-size="9" fill="#9a9490" font-family="'Sora', system-ui" letter-spacing="1.5">
+            {{ needsPulse ? 'SISTEMA OPERATIVO' : 'WATTS ACTIVOS' }}
+          </text>
         </svg>
       </div>
 
@@ -27,7 +30,7 @@
         <div class="psu-row" v-for="p in data.power?.power_supplies" :key="p.name">
           <span class="psu-led" :class="p.health === 'OK' ? 'led--ok' : 'led--warn'"></span>
           <span class="psu-name">{{ p.name }}</span>
-          <span class="psu-w">{{ p.power_watts ?? '—' }} W</span>
+          <span class="psu-w">{{ (p.power_watts === 0 && isIlo4) ? 'N/A' : (p.power_watts ?? '—') + ' W' }}</span>
           <span class="psu-status" :class="p.health === 'OK' ? 'st--ok' : 'st--warn'">{{ p.health }}</span>
         </div>
       </div>
@@ -35,7 +38,7 @@
 
     <footer class="panel-foot">
       <span class="pf-label">Capacidad total</span>
-      <span class="pf-val">{{ data.power?.capacity_watts ?? '—' }} W</span>
+      <span class="pf-val">{{ (data.power?.capacity_watts === 0 && isIlo4) ? 'N/A' : (data.power?.capacity_watts ?? '—') + ' W' }}</span>
     </footer>
   </div>
 </template>
@@ -45,7 +48,16 @@ import { computed } from 'vue'
 
 const props = defineProps({ data: { type: Object, required: true } })
 
+const isIlo4 = computed(() => {
+  if (props.data.ilo_gen === 4) return true
+  const model = (props.data.summary?.model || '').toUpperCase().replace(/ /g, '').replace(/-/g, '')
+  return model.includes('GEN8') || model.includes('GEN9')
+})
+
+const needsPulse = computed(() => isIlo4.value && (!props.data.power?.consumed_watts || props.data.power?.consumed_watts === 0))
+
 const powerPct = computed(() => {
+  if (needsPulse.value) return 15 // Un pequeño arco constante para estética
   if (!props.data?.power?.consumed_watts || !props.data?.power?.capacity_watts) return 0
   return Math.min(100, (props.data.power.consumed_watts / props.data.power.capacity_watts) * 100)
 })
@@ -79,4 +91,15 @@ const powerPct = computed(() => {
 .psu-status { font-size:9px; font-weight:700; padding:3px 8px; border-radius:5px; }
 .st--ok   { background:#e6f5f2; color:#0f6e44; border-radius:5px; padding:2px 8px; font-size:9px; font-weight:700; }
 .st--warn { background:#fef3e6; color:#854f0b; border-radius:5px; padding:2px 8px; font-size:9px; font-weight:700; }
+
+/* Pulse animation for iLO 4 */
+.pulse-stroke {
+  animation: stroke-pulse 2s infinite ease-in-out;
+  filter: drop-shadow(0 0 2px #2ecc71);
+}
+@keyframes stroke-pulse {
+  0% { opacity: 0.6; stroke-width: 10; }
+  50% { opacity: 1; stroke-width: 12; }
+  100% { opacity: 0.6; stroke-width: 10; }
+}
 </style>
