@@ -16,7 +16,8 @@ const map = {
   caution:  { cls: 'warn',    label: 'Advertencia' },
   critical: { cls: 'crit',    label: 'Crítico'     },
   on:       { cls: 'ok',      label: 'On'          },
-  off:      { cls: 'off',     label: 'Off'         },
+  apagado:  { cls: 'off',     label: 'Apagado'     },
+  off:      { cls: 'off',     label: 'Offline'     },
 }
 
 const entry  = computed(() => map[(props.health || '').toLowerCase()] ?? { cls: 'unknown', label: props.health || 'N/A' })

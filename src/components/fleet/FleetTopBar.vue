@@ -17,12 +17,11 @@
     </div>
 
     <div class="topbar-right">
-      <div class="live-pill">
-        <span class="live-dot"></span>LIVE
+      <div class="sync-status">
+        <span class="sync-label">ÚLTIMA ACTUALIZACIÓN:</span>
+        <span class="last-refresh" v-if="lastRefresh">{{ lastRefresh }}</span>
+        <span class="last-refresh" v-else>—</span>
       </div>
-
-
-      <span class="last-refresh" v-if="lastRefresh">↺ {{ lastRefresh }}</span>
 
       <button class="btn-icon" @click="$emit('open-reports')" title="Reportes">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -71,10 +70,9 @@ defineEmits(['open-reports', 'reload-all', 'add-server'])
 .brand-sub   { font-size:10px; color:#9a9490; margin-top:1px; font-weight:500; }
 .brand-count { color:#1a8a7a; font-weight:700; }
 .topbar-right { display:flex; align-items:center; gap:8px; }
-.live-pill { display:flex; align-items:center; gap:5px; background:#e6f5ee; border:1px solid #b8e4d8; padding:3px 9px; border-radius:20px; font-size:9px; font-weight:800; color:#0f6e44; letter-spacing:.08em; }
-.live-dot { width:5px; height:5px; border-radius:50%; background:#1a8a7a; animation:pulse-dot 1.5s infinite; }
-@keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:.5} }
-.last-refresh { font-size:10px; color:#9a9490; font-family:'IBM Plex Mono',monospace; }
+.sync-status { display:flex; align-items:center; gap:8px; background:#f0ede8; border:1px solid #ddd8d0; padding:4px 12px; border-radius:8px; }
+.sync-label { font-size:9px; font-weight:800; color:#9a9490; letter-spacing:.05em; }
+.last-refresh { font-size:11px; color:#1a8a7a; font-family:'IBM Plex Mono',monospace; font-weight:700; }
 .btn-icon { display:flex; align-items:center; gap:6px; font-family:'Sora',sans-serif; font-size:12px; font-weight:600; padding:7px 13px; border-radius:8px; border:1.5px solid #ddd8d0; background:white; color:#6b6560; cursor:pointer; transition:all .15s; letter-spacing:.02em; }
 .btn-icon:hover { background:#f5f2ee; border-color:#b0aba3; color:#1a1714; }
 .btn-icon:disabled { opacity:.5; cursor:not-allowed; }

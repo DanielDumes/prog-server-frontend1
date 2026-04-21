@@ -75,8 +75,9 @@
             <table class="hourly-table">
               <thead>
                 <tr>
-                  <th>Servidor</th>
+                  <th >Servidor</th>
                   <th v-for="h in 24" :key="h" class="th-h">{{ (h-1).toString().padStart(2,'0') }}</th>
+                  <th class="th-spacer"></th>
                 </tr>
               </thead>
               <tbody>
@@ -85,6 +86,7 @@
                   <td v-for="h in 24" :key="h" class="td-h">
                     <div class="h-cell" :class="cellCls(info.hours[h-1])" :title="`Hora ${(h-1)}:00 - ${info.hours[h-1] || 'Sin datos'}`"></div>
                   </td>
+                  <td class="td-spacer"></td>
                 </tr>
               </tbody>
             </table>
@@ -246,13 +248,64 @@ function isToday(ds) {
 .panel-title { font-size:14px; font-weight:600; color:var(--text); }
 .panel-badge-count { font-size:11px; font-weight:600; color:var(--text-3); background:rgba(0,0,0,0.05); padding:3px 10px; border-radius:999px; border:1px solid var(--border-light); }
 /* Hourly heatmap */
-.hourly-grid-wrap { overflow-x:auto; padding:16px; }
-.hourly-table { border-collapse:collapse; font-size:11px; }
-.hourly-table th { padding:4px 2px; text-align:center; color:var(--text-3); font-size:9px; white-space:nowrap; }
-.th-h { min-width:18px; }
-.td-srv-name { padding:4px 12px 4px 0; white-space:nowrap; font-size:11px; font-weight:600; color:var(--text-2); min-width:120px; }
-.td-h { padding:2px; }
-.h-cell { width:16px; height:16px; border-radius:3px; }
+.hourly-grid-wrap { overflow-x: auto; padding: 12px 16px; }
+
+/* Primera columna del header alineada a la izquierda */
+.hourly-table thead th:first-child {
+  text-align: left;
+  padding-left: 0;
+}
+
+.hourly-table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  font-size: 11px; 
+  table-layout: auto;
+}
+
+.hourly-table thead th { 
+  padding: 6px 4px; 
+  text-align: center; 
+  color: var(--text-3); 
+  font-size: 9px; 
+  white-space: nowrap; 
+}
+
+.th-h { 
+  width: 32px;  /* ancho fijo para que las horas sean iguales */
+}
+
+.td-srv-name { 
+  padding: 6px 24px 6px 0; 
+  white-space: nowrap; 
+  font-size: 11px; 
+  font-weight: 700; 
+  color: var(--text-2); 
+  width: 1%; /* para que sea compacto */
+  vertical-align: middle; 
+}
+
+.td-h { 
+  padding: 2px; 
+  vertical-align: middle; 
+  text-align: center;
+}
+
+.h-cell { 
+  width: 26px; 
+  height: 20px;   
+  border-radius: 3px; 
+  margin: 0 auto; 
+}
+
+.th-spacer, .td-spacer {
+  width: auto; /* absorbe lo que sobre */
+}
+
+/* Filas más elegantes */
+.hourly-table tbody tr { 
+  height: 32px; 
+}
 .cell--ok    { background:#1a8a7a; opacity:.85; }
 .cell--warn  { background:#e67e22; }
 .cell--crit  { background:#c0392b; }

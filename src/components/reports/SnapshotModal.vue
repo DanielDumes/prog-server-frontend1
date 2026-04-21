@@ -86,8 +86,26 @@ defineEmits(['close'])
 .tc-crit { color:var(--red-600);   font-weight:600; }
 .tc-off  { color:var(--gray-400);  font-weight:600; }
 .table-wrap { overflow-x:auto; }
-.report-table { width:100%; border-collapse:collapse; font-size:12px; }
-.report-table th { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border-light); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em; }
-.report-table td { padding:8px 12px; border-bottom:1px solid rgba(0,0,0,0.04); color:var(--text-2); }
-.report-table tbody tr:last-child td { border-bottom:none; }
+.report-table { 
+  width:100%; 
+  border-collapse:collapse; 
+  font-size:12px; 
+}
+.report-table th { 
+  text-align:left; 
+  padding:8px 12px; 
+  border-bottom:1px solid var(--border-light); 
+  font-size:10px; 
+  color:var(--text-3); 
+  text-transform:uppercase; 
+  letter-spacing:.06em; 
+}
+.report-table td { 
+  padding:8px 12px; 
+  border-bottom:1px solid rgba(0,0,0,0.04); 
+  color:var(--text-2); 
+}
+.report-table tbody tr:last-child td { 
+  border-bottom:none; 
+}
 </style>

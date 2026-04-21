@@ -1,134 +1,75 @@
-# iLO 5 Dashboard
+# Control Tower - Frontend
 
-Dashboard de monitoreo para servidores HPE con iLO 5, usando la API REST Redfish.
-Stack: **Vue 3 + Vite** (frontend) · **Python Flask** (backend proxy).
+Interfaz gráfica (Cliente) para **Control Tower**, la plataforma unificada de monitoreo en tiempo real para flotas de servidores HPE (iLO 4, 5 y 6).
 
----
-
-## Estructura del proyecto
-
-```
-ilo5-dashboard/
-├── backend/
-│   ├── app.py            ← Proxy Flask → iLO 5 API
-│   └── requirements.txt
-└── frontend/
-    ├── src/
-    │   ├── App.vue       ← Dashboard completo
-    │   └── main.js
-    ├── index.html
-    ├── vite.config.js
-    └── package.json
-```
+Este proyecto está construido con **Vue 3** (Composition API) y empaquetado con **Vite**. Se comunica con el backend interactuando con una API RESTful y recibiendo eventos en tiempo real a través de **Socket.IO**.
 
 ---
 
-## 1. Configurar el Backend (Flask)
+## Estructura del Frontend
+
+```
+fronted/
+├── src/
+│   ├── components/       ← Componentes reutilizables (ej. ServerCard, ToastNotification)
+│   ├── composables/      ← Lógica compartida (ej. useIlo.js para llamadas a la API)
+│   ├── views/            ← Vistas principales (FleetView, DetailView, ReportsView)
+│   ├── App.vue           ← Componente raíz (Router interno + conexión Socket.IO)
+│   └── main.js           ← Punto de entrada
+├── index.html
+├── vite.config.js
+└── package.json
+```
+
+---
+
+## 1. Tecnologías Clave
+
+-   **Vue 3 (Composition API)**: Para el manejo reactivo de los datos de la flota en tiempo real.
+-   **Socket.IO Client**: Conexión por WebSockets con el backend para recibir notificaciones (alertas de salud, cambios de estado de energía) sin necesidad de recargar la página.
+-   **CSS Nativo Moderno**: Uso de variables CSS, modo oscuro/claro automático y tipografías personalizadas (Outfit) sin dependencias adicionales de frameworks CSS pesados.
+
+---
+
+## 2. Configuración y Desarrollo
+
+### Requisitos Previos
+- Node.js (versión 18 o superior).
+- El backend configurado y corriendo (por defecto en `http://localhost:5000`).
 
 ### Instalación
 
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Variables de entorno
-
-Crea un archivo `.env` o expórtalas directamente:
-
-```bash
-export ILO_HOST=192.168.1.100    # IP del iLO de tu servidor
-export ILO_USER=Administrator
-export ILO_PASS=tu_contraseña
-```
-
-O edita directamente las líneas en `app.py`:
-```python
-ILO_HOST = "192.168.1.100"
-ILO_USER = "Administrator"
-ILO_PASS = "tu_contraseña"
-```
-
-### Ejecutar
-
-```bash
-python app.py
-# Backend corriendo en http://localhost:5000
-```
-
----
-
-## 2. Configurar el Frontend (Vue)
-
-```bash
-cd frontend
+cd fronted
 npm install
-npm run dev
-# Frontend corriendo en http://localhost:3000
 ```
 
----
+### Arrancar Servidor de Desarrollo
 
-## 3. Acceder al dashboard
-
-Abre: **http://localhost:3000**
-
-En el panel **⚙ Config** puedes cambiar en caliente:
-- Host del iLO
-- Usuario / contraseña
-- Intervalo de actualización (por defecto: 60 minutos)
-
----
-
-## Endpoints del Backend
-
-| Endpoint              | Descripción                           |
-|-----------------------|---------------------------------------|
-| `GET /api/health`     | Verifica que el backend corre         |
-| `GET /api/server/all` | Resumen + thermal + power (recomendado) |
-| `GET /api/server/summary` | Estado general, CPU, memoria      |
-| `GET /api/server/cpu` | Detalle de procesadores               |
-| `GET /api/server/memory` | DIMMs de RAM                       |
-| `GET /api/server/thermal` | Temperaturas y fans               |
-| `GET /api/server/storage` | Controladores y discos            |
-| `GET /api/server/power`   | Consumo eléctrico y PSUs          |
-
----
-
-## Notas importantes
-
-### CORS y SSL
-- El iLO 5 usa certificados SSL **self-signed** → el backend deshabilita la verificación SSL automáticamente (solo para conexiones internas de red).
-- El frontend **nunca** habla directo con el iLO; pasa siempre por el backend Flask para evitar problemas de CORS.
-
-### Credenciales iLO
-El usuario de iLO necesita al menos el privilegio **Read Only** para leer métricas. No requiere privilegios de administrador para el dashboard.
-
-### Actualización automática
-El dashboard se refresca automáticamente según el intervalo configurado (default: 60 min). El anillo de cuenta regresiva en el header muestra cuánto falta para el próximo refresh.
-
----
-
-## Producción
-
-Para producir el frontend:
 ```bash
-cd frontend
+npm run dev
+```
+
+El servidor local de Vite arrancará en `http://localhost:3000` (o `5173` si está ocupado).
+Si necesita comunicarse con un backend que corre en una IP distinta a `localhost`, configure las rutas en los endpoints dentro de los archivos `src/composables/useIlo.js` y `src/App.vue` (en la conexión del socket).
+
+---
+
+## 3. Embalaje para Producción (Build)
+
+Para generar los archivos estáticos listos para producción:
+
+```bash
 npm run build
-# Archivos estáticos en frontend/dist/
 ```
 
-Luego sirve `frontend/dist/` con Nginx o directamente desde Flask:
-```python
-# En app.py, agrega:
-from flask import send_from_directory
+Esto generará la carpeta `dist/` que contiene la aplicación optimizada y minificada.
+Puede servir esta carpeta utilizando un servidor web como **Nginx**, **Apache**, o mediante el propio backend sirviéndola como contenido estático si se ha configurado para ello usando Docker.
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_vue(path):
-    if path and os.path.exists(f'../frontend/dist/{path}'):
-        return send_from_directory('../frontend/dist', path)
-    return send_from_directory('../frontend/dist', 'index.html')
-```
+---
+
+## Notas de Arquitectura (Revisión Reciente)
+
+-   **Navegación Interna**: El frontend no utiliza librerías de enrutamiento pesadas (como vue-router) para mantener la ligereza del proyecto; en su lugar, `App.vue` orquesta condicionalmente las Vistas y pasa el estado.
+-   **Sincronización:** Cuando el sistema pierde la conexión WebSocket, intentará restablecerla; una vez reconectado, recarga la flota de forma inteligente para no dejar al usuario visualizando datos estancados.
+-   **Gestión del DOM**: Se han eliminado los intervalos (polling manuales) previamente existentes. Todo es dirigido por los empujes (`push`) del backend (daemon).

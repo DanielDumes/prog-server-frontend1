@@ -4,11 +4,11 @@
     <!-- Topbar -->
     <FleetTopBar
       :server-count="servers.length"
-      :loading="loading"
+      :loading="isReloading"
       :last-refresh="lastRefresh"
       @open-reports="$emit('open-reports')"
-      @reload-all="reloadAll"
       @add-server="showAdd = true"
+      @reload-all="forceReloadAll"
     />
 
     <!-- Alert banners -->
@@ -75,9 +75,12 @@
         :key="srv.id"
         :server="srv"
         :list-mode="gridMode === 'list'"
+        :pushed-data="getPushedData(srv.id)"
+        :refresh-count="refreshCount"
         :ref="el => { if (el) cardRefs[srv.id] = el }"
         @select="$emit('open-detail', $event)"
         @status="updateStatus(srv.id, $event)"
+        @power="updatePower(srv.id, $event)"
         @deleted="onServerDeleted"
       />
     </main>
@@ -88,63 +91,78 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import ServerCard     from '../components/ServerCard.vue'
 import AddServerModal from '../components/AddServerModal.vue'
 import FleetTopBar    from '../components/fleet/FleetTopBar.vue'
 import FleetKpiBar    from '../components/fleet/FleetKpiBar.vue'
 import FleetFilterBar from '../components/fleet/FleetFilterBar.vue'
-import { useIlo }     from '../composables/useIlo.js'
-import { REFRESH_INTERVAL_SEC } from '../config/servers.js'
 
-const props = defineProps({ refreshCount: Number })
-defineEmits(['open-detail', 'open-reports'])
+const props = defineProps({ 
+  servers: Array, 
+  loading: Boolean,
+  refreshCount: Number, 
+  heartbeat: String, 
+  pushedSummaries: Array 
+})
+const emit = defineEmits(['open-detail', 'open-reports', 'server-deleted', 'server-added'])
 
-const { getServers } = useIlo()
-const servers      = ref([])
 const cardRefs     = ref({})
 const showAdd      = ref(false)
 const lastRefresh  = ref('')
-const loading      = ref(true)
+const isReloading  = ref(false)
 const statusMap    = ref({})
-const metricsMap   = ref({})   // Bug fix: declarado para evitar ReferenceError en sort por temp/watts
+const powerMap     = ref({})
+const metricsMap   = ref({})   
 const searchQ      = ref('')
 const gridMode     = ref('grid')
 const activeFilter = ref('all')
 const sortBy       = ref('name')
 
-
+// Sincronizar lastRefresh con el heartbeat del backend
+watch(() => props.heartbeat, (newVal) => {
+  if (newVal) lastRefresh.value = newVal
+})
 
 const stats = computed(() => {
-  const s = { ok: 0, warn: 0, crit: 0, off: 0 }
-  servers.value.forEach(srv => {
+  const s = { ok: 0, warn: 0, crit: 0, off: 0, apagado: 0, encendido: 0 }
+  props.servers.forEach(srv => {
     const st = statusMap.value[srv.id]
     if      (st === 'ok')   s.ok++
     else if (st === 'warn') s.warn++
     else if (st === 'crit') s.crit++
     else                    s.off++
+
+    const pw = powerMap.value[srv.id]
+    if (pw === 'off' && st !== 'unknown') s.apagado++
+    else if (pw === 'on' && st !== 'unknown') s.encendido++
   })
   return s
 })
 
 const healthPct = computed(() => {
-  if (!servers.value.length) return 0
-  return Math.round((stats.value.ok / servers.value.length) * 100)
+  if (!props.servers.length) return 0
+  return Math.round((stats.value.ok / props.servers.length) * 100)
 })
 
 const filters = computed(() => [
   { key: 'ok',   label: 'Óptimos',     cls: 'green', count: stats.value.ok   },
   { key: 'warn', label: 'Advertencia', cls: 'amber', count: stats.value.warn },
   { key: 'crit', label: 'Críticos',    cls: 'red',   count: stats.value.crit },
-  { key: 'off',  label: 'Offline',     cls: 'gray',  count: stats.value.off  },
+  { key: 'apagado', label: 'Apagados', cls: 'gray',  count: stats.value.apagado },
+  { key: 'unknown', label: 'Offline',  cls: 'gray',  count: stats.value.off  },
 ])
 
-const statusOrder = { crit: 0, warn: 1, ok: 2, off: 3 }
+const statusOrder = { crit: 0, warn: 1, ok: 2, unknown: 3 }
 
 const filteredServers = computed(() => {
-  let list = [...servers.value]
+  let list = [...props.servers]
   if (activeFilter.value !== 'all') {
-    list = list.filter(srv => statusMap.value[srv.id] === activeFilter.value)
+    if (activeFilter.value === 'apagado') {
+      list = list.filter(srv => powerMap.value[srv.id] === 'off' && statusMap.value[srv.id] !== 'unknown')
+    } else {
+      list = list.filter(srv => statusMap.value[srv.id] === activeFilter.value)
+    }
   }
   if (searchQ.value.trim()) {
     const q = searchQ.value.toLowerCase()
@@ -192,32 +210,48 @@ const chartOptions = {
   plugins: { legend: { display: false }, tooltip: { enabled: true } }
 }
 
-async function loadServers() {
-  loading.value = true
-  try { servers.value = await getServers() }
-  catch (e) { console.error(e) }
-  finally { loading.value = false }
+function onServerAdded()  { 
+    showAdd.value = false
+    emit('server-added') 
 }
 
-function onServerAdded(srv)  { showAdd.value = false; servers.value.push(srv) }
 function onServerDeleted(id) {
-  servers.value = servers.value.filter(s => s.id !== id)
   delete statusMap.value[id]
+  delete powerMap.value[id]
   delete metricsMap.value[id]
   delete cardRefs.value[id]
+  emit('server-deleted', id)
 }
+
+async function forceReloadAll() {
+  if (isReloading.value) return
+  isReloading.value = true
+  
+  const promises = []
+  for (const id in cardRefs.value) {
+    const card = cardRefs.value[id]
+    if (card && typeof card.reload === 'function') {
+      promises.push(card.reload())
+    }
+  }
+  
+  await Promise.allSettled(promises)
+  isReloading.value = false
+}
+
 function updateStatus(id, status) { statusMap.value[id] = status }
-function reloadAll() {
-  Object.values(cardRefs.value).forEach(c => c?.reload?.())
-  lastRefresh.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+function updatePower(id, power) { powerMap.value[id] = power }
+
+function getPushedData(id) {
+  if (!props.pushedSummaries) return null
+  return props.pushedSummaries.find(s => s.server_id === id) || null
 }
 
 onMounted(() => {
-  loadServers()
-  lastRefresh.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+  if (props.heartbeat) lastRefresh.value = props.heartbeat
 })
-watch(() => props.refreshCount, () => { reloadAll() })
-onUnmounted(() => { })
+
+
 </script>
 
 <style scoped>

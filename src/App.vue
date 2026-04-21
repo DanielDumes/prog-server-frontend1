@@ -6,14 +6,22 @@
 <template>
   <FleetView
     v-if="currentView === 'fleet'"
+    :servers="servers"
+    :loading="loading"
     :refresh-count="refreshTrigger"
+    :heartbeat="lastHeartbeat"
+    :pushed-summaries="pushedSummaries"
     @open-detail="openDetail"
     @open-reports="openReports"
+    @server-deleted="refreshInventory"
+    @server-added="refreshInventory"
   />
   <DetailView
     v-else-if="currentView === 'detail'"
     :server="selectedServer"
     :refresh-count="refreshTrigger"
+    :heartbeat="lastHeartbeat"
+    :pushed-summaries="pushedSummaries"
     @back="closeToFleet"
   />
   <ReportsView
@@ -30,36 +38,114 @@ import FleetView  from './views/FleetView.vue'
 import DetailView from './views/DetailView.vue'
 import ReportsView from './views/ReportsView.vue'
 import ToastNotification from './components/ToastNotification.vue'
+import { useIlo } from './composables/useIlo.js'
 
 const currentView = ref('fleet')
 const selectedServer = ref(null)
 const activeToasts = ref([])
-const refreshTrigger = ref(0) // Incrementar para forzar refresh de datos
+const refreshTrigger = ref(0) 
+const lastHeartbeat = ref(localStorage.getItem('last_fleet_heartbeat') || '') 
+const pushedSummaries = ref([])
+const servers = ref([])
+const loading = ref(true)
+
+const { getHealth, getServers } = useIlo()
+
+async function refreshInventory() {
+  loading.value = true
+  try {
+    servers.value = await getServers()
+  } catch (e) {
+    console.error("Error cargando inventario:", e)
+  } finally {
+    loading.value = false
+  }
+}
 
 // Configuración de Socket.IO
-onMounted(() => {
-  // Ajusta la URL al puerto de tu backend
+onMounted(async () => {
+  // 1. Cargar inventario inicial
+  await refreshInventory()
+
+  // 2. Obtener estado inicial fresco (actualiza lo que hay en localStorage)
+  try {
+    const health = await getHealth()
+    if (health.last_fleet_update) {
+      let ts = health.last_fleet_update
+      if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) {
+        ts = ts.trim() + 'Z'
+      }
+      const date = new Date(ts)
+      const timeStr = date.toLocaleTimeString('es-EC', { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      })
+      lastHeartbeat.value = timeStr
+      localStorage.setItem('last_fleet_heartbeat', timeStr)
+    }
+  } catch (e) {
+    console.error("Error obteniendo heartbeat inicial:", e)
+  }
+
+  // 3. Conectar socket
   const socket = io('http://localhost:5000')
 
   socket.on('new_alert', (alert) => {
     const id = Date.now() + Math.random()
     activeToasts.value.push({ ...alert, id })
-    
-    // Auto-eliminar tras 10 segundos
     setTimeout(() => removeToast(id), 10000)
     
-    // Forzar actualización de la UI si es un evento de salud o conexión
     if (['ConnectionLoss', 'HealthDegradation', 'HealthRecovery', 'PowerStateChanged'].includes(alert.type)) {
       refreshTrigger.value++
     }
   })
 
-  socket.on('fleet_update', () => {
+  socket.on('fleet_update', (data) => {
+    if (data.timestamp) {
+      let ts = data.timestamp
+      if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) {
+        ts = ts.trim() + 'Z'
+      }
+      const date = new Date(ts)
+      const timeStr = date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+      lastHeartbeat.value = timeStr
+      localStorage.setItem('last_fleet_heartbeat', timeStr)
+    }
+    
+    if (data.summaries) {
+      pushedSummaries.value = data.summaries
+    }
     refreshTrigger.value++
   })
 
-  socket.on('connect', () => console.log('[Socket] Conectado al backend'))
-  socket.on('disconnect', () => console.log('[Socket] Desconectado'))
+  // Al conectar: si ya hubo una conexión previa (reconexión tras reinicio del backend),
+  // recargar inventario y heartbeat automáticamente sin que el usuario tenga que refrescar.
+  let isFirstConnect = true
+  socket.on('connect', async () => {
+    console.log('[Socket] Conectado al backend')
+    if (isFirstConnect) {
+      isFirstConnect = false
+      return
+    }
+    // ── Reconexión: recargar todo ──
+    console.log('[Socket] Reconectado — recargando datos automáticamente...')
+    await refreshInventory()
+    try {
+      const health = await getHealth()
+      if (health.last_fleet_update) {
+        let ts = health.last_fleet_update
+        if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) ts = ts.trim() + 'Z'
+        const timeStr = new Date(ts).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+        lastHeartbeat.value = timeStr
+        localStorage.setItem('last_fleet_heartbeat', timeStr)
+      }
+    } catch (e) {
+      console.warn('[Socket] No se pudo obtener heartbeat tras reconexión:', e)
+    }
+    refreshTrigger.value++
+  })
+
+  socket.on('disconnect', () => console.log('[Socket] Desconectado — esperando reconexión...'))
 })
 
 function removeToast(id) {

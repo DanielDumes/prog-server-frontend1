@@ -9,8 +9,7 @@ export function useReportHelpers() {
       ConnectionLoss:    'Desconexión',
       HealthDegradation: 'Degradación',
       HealthRecovery:    'Recuperación',
-      PowerOff:          'Apagado',
-      PowerOn:           'Encendido',
+      PowerStateChanged: 'Energía',
       HealthChange:      'Cambio Health',
     }[t] || t
   }
@@ -20,14 +19,13 @@ export function useReportHelpers() {
       ConnectionLoss:    'chip--warn',
       HealthDegradation: 'chip--crit',
       HealthRecovery:    'chip--ok',
-      PowerOff:          'chip--off',
-      PowerOn:           'chip--ok',
+      PowerStateChanged: 'chip--warn',
       HealthChange:      'chip--warn',
     }[t] || ''
   }
 
   function stateCls(s) {
-    return { OK: 'tc-ok', Warning: 'tc-warn', Critical: 'tc-crit', Offline: 'tc-off', Off: 'tc-off' }[s] || ''
+    return { OK: 'tc-ok', Warning: 'tc-warn', Critical: 'tc-crit', Offline: 'tc-off', Off: 'tc-crit' }[s] || ''
   }
 
   function healthLabel(h) {
@@ -51,6 +49,7 @@ export function useReportHelpers() {
     if (status === 'Warning') return 'cell--warn'
     if (status === 'Critical')return 'cell--crit'
     if (status === 'Offline') return 'cell--off'
+    if (status === 'Off')     return 'cell--crit'
     return ''
   }
 

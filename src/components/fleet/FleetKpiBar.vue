@@ -30,6 +30,14 @@
         <span class="ks-lbl">Críticos</span>
       </div>
       <div class="kpi-stat">
+        <span class="ks-val ks--total">{{ stats.encendido || 0 }}</span>
+        <span class="ks-lbl">Encendidos</span>
+      </div>
+      <div class="kpi-stat">
+        <span class="ks-val ks--muted">{{ stats.apagado || 0 }}</span>
+        <span class="ks-lbl">Apagados</span>
+      </div>
+      <div class="kpi-stat">
         <span class="ks-val ks--off">{{ stats.off }}</span>
         <span class="ks-lbl">Offline</span>
       </div>
@@ -50,7 +58,7 @@
         <span class="hbl-item"><span class="hbl-dot hbl--ok"></span>OK</span>
         <span class="hbl-item"><span class="hbl-dot hbl--warn"></span>Warn</span>
         <span class="hbl-item"><span class="hbl-dot hbl--crit"></span>Crit</span>
-        <span class="hbl-item"><span class="hbl-dot hbl--off"></span>Off</span>
+        <span class="hbl-item"><span class="hbl-dot hbl--off"></span>Offline</span>
       </div>
     </div>
   </section>
@@ -64,7 +72,7 @@ ChartJS.register(ArcElement, Tooltip, Legend)
 
 const props = defineProps({
   servers:      { type: Array,  default: () => [] },
-  stats:        { type: Object, default: () => ({ ok:0, warn:0, crit:0, off:0 }) },
+  stats:        { type: Object, default: () => ({ ok:0, warn:0, crit:0, off:0, apagado:0, encendido:0 }) },
   healthPct:    { type: Number, default: 0        },
   chartData:    { type: Object, required: true    },
   chartOptions: { type: Object, required: true    },
@@ -91,6 +99,7 @@ function pct(n) {
 .ks--ok    { color:#1a8a7a; }
 .ks--warn  { color:#e67e22; }
 .ks--crit  { color:#c0392b; }
+.ks--muted { color:#64748b; }
 .ks--off   { color:#b0aba3; }
 .ks-blink  { animation:blink 1.2s infinite; }
 .kpi-health-col { flex:1; min-width:180px; }

@@ -43,6 +43,12 @@
       <div class="loader-msg">Conectando con <strong>{{ server.host }}</strong>…</div>
     </div>
 
+    <!-- Hardware scan banner (servidor recién agregado) -->
+    <div class="hw-scan-bar" v-if="hardwareScanning && data">
+      <div class="hw-scan-pulse"></div>
+      <span>Escaneando inventario de hardware (memoria y almacenamiento)… esto puede tardar unos segundos en servidores nuevos.</span>
+    </div>
+
     <!-- Main Content -->
     <main class="main" v-if="data">
       <!-- Hero strip -->
@@ -78,8 +84,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useIlo }            from '../composables/useIlo.js'
-import { REFRESH_INTERVAL_SEC } from '../config/servers.js'
+import { useIlo } from '../composables/useIlo.js'
 import HeroStrip    from '../components/detail/HeroStrip.vue'
 import CpuPanel     from '../components/detail/CpuPanel.vue'
 import RamPanel     from '../components/detail/RamPanel.vue'
@@ -89,16 +94,64 @@ import FansPanel    from '../components/detail/FansPanel.vue'
 import StoragePanel from '../components/detail/StoragePanel.vue'
 import SystemInfoPanel from '../components/detail/SystemInfoPanel.vue'
 
-const props = defineProps({ server: Object, refreshCount: Number })
+const props = defineProps({ 
+  server: Object, 
+  refreshCount: Number, 
+  heartbeat: String,
+  pushedSummaries: Array 
+})
 defineEmits(['back'])
 
-const { fetchAll } = useIlo()
-const data       = ref(null)
-const loading    = ref(true)
-const error      = ref(null)
-const lastUpdate = ref('')
+const { fetchAll, fetchHardwareOnly } = useIlo()
+const data           = ref(null)
+const loading        = ref(true)
+const error          = ref(null)
+const lastUpdate     = ref('')
+const hardwareScanning = ref(false)   // true mientras reintenta storage/memory
 
-let autoTimer    = null
+// ── Retry automático de hardware (storage + memory) ───────────────
+const MAX_HW_RETRIES = 8           // 8 × 5s = 40 s máximo
+let _hwRetryTimer   = null
+let _hwRetryCount   = 0
+
+function _cancelHwRetry() {
+  if (_hwRetryTimer) { clearTimeout(_hwRetryTimer); _hwRetryTimer = null }
+  hardwareScanning.value = false
+  _hwRetryCount = 0
+}
+
+async function _retryHardware() {
+  if (!data.value || _hwRetryCount >= MAX_HW_RETRIES) {
+    _cancelHwRetry()
+    return
+  }
+  try {
+    const { storage, memory } = await fetchHardwareOnly(props.server)
+    const gotStorage = (storage?.controllers?.length ?? 0) > 0
+    const gotMemory  = (memory?.dimms?.length ?? 0) > 0
+    if (gotStorage || gotMemory) {
+      // Merge: aplica lo que llegó, conserva lo que ya había
+      data.value = {
+        ...data.value,
+        storage: gotStorage ? storage : data.value.storage,
+        memory:  gotMemory  ? memory  : data.value.memory,
+      }
+    }
+    // Evaluar si YA tenemos datos en data.value (puede ser de este fetch o de uno anterior)
+    // para decidir si seguimos reintentando o paramos.
+    const nowHasStorage = (data.value?.storage?.controllers?.length ?? 0) > 0
+    const nowHasMemory  = (data.value?.memory?.dimms?.length  ?? 0) > 0
+    if (!nowHasMemory) {
+      _hwRetryCount++
+      _hwRetryTimer = setTimeout(_retryHardware, 5000)
+    } else {
+      _cancelHwRetry()
+    }
+  } catch {
+    _hwRetryCount++
+    _hwRetryTimer = setTimeout(_retryHardware, 5000)
+  }
+}
 
 // ── Computed para HeroStrip ───────────────────────────────────────
 const ambientTempSensor = computed(() => {
@@ -133,10 +186,50 @@ function healthCls(h)   { return { OK: 'ok', Warning: 'warn', Critical: 'crit' }
 
 // ── DATA LOADING ──────────────────────────────────────────────────
 async function load() {
-  loading.value = true; error.value = null
+  // Cancelar cualquier retry en curso antes de una recarga
+  _cancelHwRetry()
+  data.value = null
+  loading.value = true
+  error.value = null
   try {
-    data.value = await fetchAll(props.server)
-    lastUpdate.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+    // fetchAll trae summary + storage + memory (datos completos).
+    // Si el summary falla (servidor recién agregado, posible race condition),
+    // reintentamos hasta 3 veces con 2s de espera antes de mostrar error.
+    let res = null
+    const MAX_FULL_RETRIES = 3
+    for (let attempt = 0; attempt < MAX_FULL_RETRIES; attempt++) {
+      try {
+        res = await fetchAll(props.server)
+        break  // éxito
+      } catch (e) {
+        if (attempt < MAX_FULL_RETRIES - 1) {
+          await new Promise(r => setTimeout(r, 2000))
+        } else {
+          throw e  // último intento: propagar el error
+        }
+      }
+    }
+
+    data.value = res
+    if (res.last_updated) {
+      let ts = res.last_updated
+      if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) {
+        ts = ts.trim() + 'Z'
+      }
+      const date = new Date(ts)
+      lastUpdate.value = date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+    }
+    // ── Retry automático si storage O memory llegan vacíos ──────────
+    // Ocurre cuando el servidor es nuevo y el deep-poll del backend
+    // aún está corriendo en segundo plano.
+    // aún está corriendo en segundo plano. Al usar !hasMemory asumimos
+    // que la RAM y Storage se guardan juntos atómicamente. Si hay RAM
+    // pero no Storage (ej. server sin discos), evitamos falsos reintentos.
+    const hasMemory  = (res.memory?.dimms?.length ?? 0) > 0
+    if (!hasMemory) {
+      hardwareScanning.value = true
+      _hwRetryTimer = setTimeout(_retryHardware, 5000)
+    }
   } catch (e) { 
     error.value = `Error: ${e.message}`
   } finally { 
@@ -148,16 +241,47 @@ async function openConsole() {
   window.open(`https://${props.server.host}/`, '_blank')
 }
 
-function copyToClipboard(text, label) {
-  navigator.clipboard.writeText(text)
-  // Opcional: podrías disparar un toast aquí si tuvieras un sistema de notificaciones
-}
+// Sincronizar con el heartbeat global
+watch(() => props.heartbeat, (newVal) => {
+  if (newVal) lastUpdate.value = newVal
+})
 
-// Bug fix: responder al refreshCount del padre (socket events)
-watch(() => props.refreshCount, () => load())
+// Ciclo de monitoreo: MERGE en vez de reemplazar para no perder storage/memory
+// Este watch NO se ejecuta al montar (no immediate) — la animación siempre se muestra
+watch(() => props.pushedSummaries, (newList) => {
+  if (!newList || !props.server || loading.value) return
+  const fresh = newList.find(s => s.server_id === props.server.id)
+  if (!fresh) return
+  
+  // MERGE: aplicar datos frescos del ciclo pero conservar storage y memory
+  // que solo vienen del fetchAll y NO están en el pushedSummaries
+  data.value = {
+    ...fresh,
+    storage: data.value?.storage ?? null,
+    memory:  data.value?.memory  ?? null,
+  }
 
-onMounted(() => { load(); autoTimer = setInterval(load, REFRESH_INTERVAL_SEC * 1000) })
-onUnmounted(() => { clearInterval(autoTimer) })
+  if (fresh.last_updated) {
+    let ts = fresh.last_updated
+    if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) {
+      ts = ts.trim() + 'Z'
+    }
+    const date = new Date(ts)
+    lastUpdate.value = date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+  }
+})
+
+onMounted(() => { 
+  load()
+  if (props.heartbeat) lastUpdate.value = props.heartbeat
+})
+
+onUnmounted(() => {
+  // Limpiar timer al salir de la vista para evitar memory leaks
+  _cancelHwRetry()
+})
+
+
 </script>
 
 <style scoped>
@@ -184,10 +308,6 @@ onUnmounted(() => { clearInterval(autoTimer) })
 .sync--refreshing { color: #1a8a7a; }
 .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #1a8a7a; animation: sync-blink 1s infinite; }
 @keyframes sync-blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } }
-.btn-sync { display:flex; align-items:center; gap:7px; font-family:'Sora',sans-serif; font-size:12px; font-weight:700; padding:8px 18px; border-radius:8px; background:#1a1714; color:#f5f2ee; border:none; cursor:pointer; letter-spacing:.02em; transition:all .15s; }
-.btn-sync:hover { background:#2d2925; }
-.btn-sync:disabled { opacity:.5; cursor:not-allowed; }
-
 .btn-console-main {
   display: flex; align-items: center; gap: 8px;
   font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
@@ -202,15 +322,14 @@ onUnmounted(() => { clearInterval(autoTimer) })
 }
 .btn-console-main:hover svg { transform: scale(1.1); }
 
-.btn-console-jirc-main { color: #8e44ad; border-color: #8e44ad; }
-.btn-console-jirc-main:hover {
-  background: #8e44ad; color: white;
-  box-shadow: 0 4px 12px rgba(142,68,173,0.3);
-}
-
 /* ── ERROR + LOADER ── */
 .err-bar   { background:#fdecea; border-bottom:1.5px solid #f5c0c0; padding:10px 36px; display:flex; align-items:center; gap:12px; font-size:12px; font-weight:600; color:#a32d2d; }
 .err-retry { margin-left:auto; background:#a32d2d; color:white; border:none; padding:5px 14px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:700; }
+
+/* ── HARDWARE SCAN BANNER ── */
+.hw-scan-bar { display:flex; align-items:center; gap:10px; padding:9px 36px; background:#fffbf0; border-bottom:1.5px solid #f5e0a0; font-size:11px; font-weight:500; color:#7a5c00; }
+.hw-scan-pulse { width:8px; height:8px; border-radius:50%; background:#e6a817; flex-shrink:0; animation:hw-pulse 1.4s ease-in-out infinite; }
+@keyframes hw-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(1.35)} }
 .page-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; height:calc(100vh - 60px); }
 .loader-track { width:240px; height:3px; background:#e0dbd4; border-radius:2px; overflow:hidden; }
 .loader-car   { width:80px; height:3px; background:#1a8a7a; border-radius:2px; animation:slide 1.4s ease-in-out infinite; }
@@ -227,13 +346,7 @@ onUnmounted(() => { clearInterval(autoTimer) })
 .spin { display:inline-block; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
-/* Transitions */
-.slide-up-enter-active, .slide-up-leave-active { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-.slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%) scale(0.9); opacity: 0; }
-
-@keyframes slideUp { from { transform: translateY(100%) scale(0.9); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
-
 /* ── RESPONSIVE ── */
 @media (max-width:1200px) { .trio-grid { grid-template-columns:1fr 1fr; } }
-@media (max-width:800px)  { .trio-grid,.duo-grid { grid-template-columns:1fr; } .main { padding:18px 20px; } .topbar { padding:0 20px; } .cred-helper { right: 10px; left: 10px; bottom: 10px; width: auto; } }
+@media (max-width:800px)  { .trio-grid,.duo-grid { grid-template-columns:1fr; } .main { padding:18px 20px; } .topbar { padding:0 20px; } }
 </style>

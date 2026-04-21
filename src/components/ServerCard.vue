@@ -40,7 +40,7 @@
     <!-- Metrics grid (Visible si hay datos, incluso si está cargando) -->
     <div class="sc-metrics" v-if="data">
       <div class="met">
-        <span class="mv" :class="data.summary?.power_state === 'On' ? 'mv--ok' : 'mv--muted'">
+        <span class="mv" :class="data.summary?.power_state === 'On' ? 'mv--ok' : 'mv--crit'">
           {{ data.summary?.power_state ?? '—' }}
         </span>
         <span class="ml">Power</span>
@@ -107,7 +107,7 @@
       <div class="sc-loading-pill" v-else-if="loading"><div class="spinner-xs"></div></div>
     </div>
     <div class="sl-metrics" v-if="data">
-      <div class="sl-met"><span class="slm-v" :class="data.summary?.power_state === 'On' ? 'mv--ok' : 'mv--muted'">{{ data.summary?.power_state ?? '—' }}</span><span class="slm-l">Power</span></div>
+      <div class="sl-met"><span class="slm-v" :class="data.summary?.power_state === 'On' ? 'mv--ok' : 'mv--crit'">{{ data.summary?.power_state ?? '—' }}</span><span class="slm-l">Power</span></div>
       <div class="sl-met"><span class="slm-v" :class="tempCls">{{ displayTemp !== null ? displayTemp + '°C' : '—' }}</span><span class="slm-l">Ambiente</span></div>
       <div class="sl-met"><span class="slm-v mv--blue">{{ isIlo4MissingPower ? 'OK' : (data.power?.consumed_watts ? data.power.consumed_watts + ' W' : '—') }}</span><span class="slm-l">Consumo</span></div>
       <div class="sl-met"><span class="slm-v">{{ data.summary?.memory_gib ? data.summary.memory_gib + ' GB' : '—' }}</span><span class="slm-l">RAM</span></div>
@@ -135,14 +135,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Swal from 'sweetalert2'
 import HealthPill from './HealthPill.vue'
 import { useIlo } from '../composables/useIlo.js'
-import { REFRESH_INTERVAL_SEC } from '../config/servers.js'
 
-const props = defineProps({ server: Object, listMode: { type: Boolean, default: false } })
-const emit  = defineEmits(['select', 'status', 'deleted'])
+const props = defineProps({ 
+  server: Object, 
+  listMode: { type: Boolean, default: false },
+  pushedData: { type: Object, default: null },
+  refreshCount: { type: Number, default: 0 }
+})
+const emit  = defineEmits(['select', 'status', 'power', 'deleted'])
 
 const { fetchSummary, deleteServer } = useIlo()
 const data      = ref(null)
@@ -151,8 +155,7 @@ const error     = ref(null)
 const updatedAt = ref('')
 const deleting      = ref(false)
 
-let timer = null
-
+// ── Computed (definidos ANTES del watch para evitar ReferenceError en immediate) ──
 const isIlo4MissingPower = computed(() => {
   if (!data.value) return false
   const isIlo4 = data.value.ilo_gen === 4 || (data.value.summary?.model || '').toUpperCase().includes('GEN8') || (data.value.summary?.model || '').toUpperCase().includes('GEN9')
@@ -160,20 +163,16 @@ const isIlo4MissingPower = computed(() => {
   return isIlo4 && hasNoPower
 })
 
-// ── Computed ─────────────────────────────────────────────────────
 const displayTemp = computed(() => {
   const sensors = data.value?.temperatures ?? []
   if (!sensors.length) return null
-  
-  // Priorizar el sensor "Inlet Ambient" (primer sensor en iLO 5 usualmente)
+  // Priorizar el sensor "Inlet Ambient"
   const ambient = sensors.find(s => {
     const n = (s.name || "").toLowerCase()
     return n.includes("inlet") || n.includes("ambient")
   })
-  
   if (ambient && ambient.reading_c != null) return ambient.reading_c
-  
-  // Fallback: Max temp de todos los sensores
+  // Fallback: Max temp
   const vals = sensors.map(t => t.reading_c).filter(v => v != null)
   return vals.length ? Math.max(...vals) : null
 })
@@ -184,7 +183,6 @@ const statusCls = computed(() => {
   if (h === 'ok')       return 'ip--ok'
   if (h === 'warning')  return 'ip--warn'
   if (h === 'critical') return 'ip--crit'
-  if (data.value?.summary?.power_state === 'Off') return 'ip--off'
   return 'ip--unknown'
 })
 
@@ -194,15 +192,17 @@ const _status = computed(() => {
   if (h === 'ok')       return 'ok'
   if (h === 'warning')  return 'warn'
   if (h === 'critical') return 'crit'
-  if (data.value?.summary?.power_state === 'Off') return 'off'
   return 'unknown'
+})
+
+const _power = computed(() => {
+  return data.value?.summary?.power_state === 'Off' ? 'off' : 'on'
 })
 
 const accentCls = computed(() => ({
   'ac--ok':      _status.value === 'ok',
   'ac--warn':    _status.value === 'warn',
   'ac--crit':    _status.value === 'crit',
-  'ac--off':     _status.value === 'off',
   'ac--unknown': _status.value === 'unknown',
 }))
 
@@ -223,15 +223,65 @@ const tempCls = computed(() => {
   return ''
 })
 
+// ── Watch (DESPUÉS de computed para que _status ya exista en el immediate) ──────
+watch(() => props.pushedData, (newVal) => {
+  if (newVal) {
+    data.value = newVal
+    loading.value = false
+    if (newVal.last_updated) {
+      let ts = newVal.last_updated
+      if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) {
+        ts = ts.trim() + 'Z'
+      }
+      const date = new Date(ts)
+      updatedAt.value = date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+    }
+    emit('status', _status.value)
+    emit('power', _power.value)
+  }
+}, { immediate: true })
+
+// Cuando el backend se reinicia y el socket reconecta, App.vue incrementa
+// refreshCount → la tarjeta recarga sus datos automáticamente.
+watch(() => props.refreshCount, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    load()
+  }
+})
+
 // ── Methods ──────────────────────────────────────────────────────
 async function load() {
-  loading.value = true; error.value = null
+  // Solo mostrar el spinner si NO tenemos datos aún (carga inicial de la página)
+  if (!data.value) loading.value = true
+  
+  error.value = null
   try {
-    data.value      = await fetchSummary(props.server)
-    updatedAt.value = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+    const res = await fetchSummary(props.server)
+    // Si llegaron datos empujados DURANTE la petición, usarlos (ya están en data.value via watch).
+    // Si NO llegaron datos empujados, usar la respuesta HTTP.
+    // Garantizamos SIEMPRE tener data.value para evitar pantalla en blanco.
+    if (!data.value) {
+      // No hubo datos empujados: usar respuesta HTTP
+      data.value = res
+    }
+    // Si data.value ya fue llenado por el watch de pushedData, lo respetamos.
+    // pero igualmente actualizamos updatedAt si no está seteado
+    if (data.value && !updatedAt.value) {
+      const ts_raw = data.value.last_updated
+      if (ts_raw) {
+        let ts = ts_raw
+        if (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) {
+          ts = ts.trim() + 'Z'
+        }
+        const date = new Date(ts)
+        updatedAt.value = date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+      }
+    }
     emit('status', _status.value)
+    emit('power', _power.value)
   } catch(e) {
-    error.value = e.message
+    // Si no tenemos datos de ningún lado, mostrar error
+    if (!data.value) error.value = e.message
     emit('status', 'unknown')
   } finally {
     loading.value = false
@@ -241,11 +291,6 @@ async function load() {
 async function openConsole() {
   window.open(`https://${props.server.host}/`, '_blank')
 }
-
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text)
-}
-
 
 async function handleDelete() {
   const result = await Swal.fire({
@@ -296,8 +341,22 @@ async function handleDelete() {
   }
 }
 
-onMounted(() => { load(); timer = setInterval(load, REFRESH_INTERVAL_SEC * 1000) })
-onUnmounted(() => clearInterval(timer))
+onMounted(async () => { 
+  // Si pushedData ya llenó data.value (via watch immediate), no necesitamos fetch.
+  // Si no, pedimos los datos al backend.
+  if (!data.value) {
+    await load()
+  } else {
+    loading.value = false
+    emit('status', _status.value)
+    emit('power', _power.value)
+  }
+  // Segunda validación: si después del load data.value sigue null (caso extremo),
+  // intentar una vez más con un pequeño delay para esperar posibles pushedData tardíos.
+  if (!data.value && !error.value) {
+    await load()
+  }
+})
 defineExpose({ reload: load })
 </script>
 

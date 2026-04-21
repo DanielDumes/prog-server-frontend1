@@ -58,6 +58,20 @@
           <div class="panel-title">Registro de Eventos — Últimos 7 días</div>
           <div class="panel-badge-count">{{ filteredWeeklyLogs.length ?? 0 }} registros</div>
         </div>
+        
+        <!-- Alerta de servidores apagados actualmente -->
+        <div v-if="weekly.off_servers && weekly.off_servers.length > 0" class="off-servers-alert">
+          <div class="off-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+            <strong>¡Atención! Tienes {{ weekly.off_servers.length }} servidor(es) actualmente apagado(s)</strong>
+          </div>
+          <div class="off-list">
+            <span v-for="srv in weekly.off_servers" :key="srv.server_host" class="off-pill">
+              {{ srv.server_label || srv.server_host }} 
+              <span class="off-ip">({{ srv.server_host }})</span>
+            </span>
+          </div>
+        </div>
         <div v-if="!filteredWeeklyLogs.length" class="empty-log">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M9 14 4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
           <span>Sin incidencias esta semana. Todo en orden.</span>
@@ -152,4 +166,11 @@ defineProps({
 .empty-log { padding:40px; text-align:center; color:var(--text-4); font-size:13px; display:flex; flex-direction:column; align-items:center; gap:12px; }
 .spinner { width:16px; height:16px; border-radius:50%; border:2px solid var(--border); border-top-color:var(--blue-400); animation:spin .8s linear infinite; flex-shrink:0; }
 @keyframes spin { to { transform:rotate(360deg); } }
+
+/* Alerta de servidores off */
+.off-servers-alert { background: rgba(224,53,53,0.06); border-bottom: 1px solid rgba(224,53,53,0.2); padding: 16px 20px; }
+.off-header { display:flex; align-items:center; gap:8px; color: var(--red-600); font-size: 13px; margin-bottom: 10px; }
+.off-list { display:flex; flex-wrap:wrap; gap:8px; }
+.off-pill { background: #fff; border: 1px solid rgba(224,53,53,0.3); color: var(--red-600); font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; box-shadow: 0 2px 4px rgba(224,53,53,0.05); }
+.off-pill .off-ip { font-family: 'JetBrains Mono', monospace; font-weight:400; opacity: 0.8; margin-left:4px; }
 </style>
