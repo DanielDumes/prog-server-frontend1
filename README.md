@@ -57,11 +57,7 @@ Si necesita comunicarse con un backend que corre en una IP distinta a `localhost
 
 ## 3. Embalaje para Producción (Build)
 
-Para generar los archivos estáticos listos para producción:
 
-```bash
-npm run build
-```
 
 Esto generará la carpeta `dist/` que contiene la aplicación optimizada y minificada.
 Puede servir esta carpeta utilizando un servidor web como **Nginx**, **Apache**, o mediante el propio backend sirviéndola como contenido estático si se ha configurado para ello usando Docker.
